@@ -21,34 +21,28 @@ from PIL import Image
 # Allow imports from src/
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import (
+from config import (  # noqa: E402
     CLASS_NAMES,
     IMG_HEIGHT,
     IMG_WIDTH,
     LANDMARK_SIGNALS,
     NORMALIZE_MEAN,
     NORMALIZE_STD,
-    NUM_SIGNALS,
     ONNX_MODEL_PATH,
     SIGNAL_LENGTH,
     SIGNAL_NAMES,
-    STFT_NFFT,
-    STFT_NOVERLAP,
-    STFT_NPERSEG,
-    VIDEO_FPS,
-    CHANNEL_SIGNAL_MAP,
 )
-from make_spectrograms import signals_to_spectrogram
+from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
 mp_face_mesh = mp.solutions.face_mesh
 
 EMOTION_EMOJIS = {
-    "Angry":    "😠",
+    "Angry": "😠",
     "Contempt": "😒",
-    "Disgust":  "🤢",
-    "Fear":     "😨",
-    "Happy":    "😊",
-    "Sadness":  "😢",
+    "Disgust": "🤢",
+    "Fear": "😨",
+    "Happy": "😊",
+    "Sadness": "😢",
     "Surprise": "😲",
 }
 
@@ -59,6 +53,7 @@ class ONNXInferenceEngine:
 
     def __init__(self, model_path: Path = ONNX_MODEL_PATH) -> None:
         import onnxruntime as ort
+
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self.session = ort.InferenceSession(
@@ -77,14 +72,14 @@ class ONNXInferenceEngine:
         """
         tensor = self._preprocess(spectrogram_image)
         logits = self.session.run(None, {self.input_name: tensor})[0]
-        proba  = self._softmax(logits[0])
+        proba = self._softmax(logits[0])
         return proba
 
     def _preprocess(self, img: np.ndarray) -> np.ndarray:
-        pil   = Image.fromarray(img).resize((IMG_WIDTH, IMG_HEIGHT))
-        arr   = np.array(pil, dtype=np.float32) / 255.0
-        arr   = (arr - np.array(NORMALIZE_MEAN)) / np.array(NORMALIZE_STD)
-        arr   = arr.transpose(2, 0, 1)       # HWC → CHW
+        pil = Image.fromarray(img).resize((IMG_WIDTH, IMG_HEIGHT))
+        arr = np.array(pil, dtype=np.float32) / 255.0
+        arr = (arr - np.array(NORMALIZE_MEAN)) / np.array(NORMALIZE_STD)
+        arr = arr.transpose(2, 0, 1)  # HWC → CHW
         return arr[np.newaxis, :].astype(np.float32)  # add batch dim
 
     @staticmethod
@@ -132,7 +127,7 @@ class FacialSignalBuffer:
             return False
 
         lm = results.multi_face_landmarks[0].landmark
-        pts = np.array([[l.x * w, l.y * h, l.z * w] for l in lm])
+        pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
         for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
@@ -151,7 +146,7 @@ class FacialSignalBuffer:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer."""
         matrix = []
         for name in SIGNAL_NAMES:
-            raw = np.array(self.buffer[name][-self.window_size:], dtype=np.float32)
+            raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
             resampled = np.interp(
                 np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
                 np.arange(len(raw)),
@@ -185,19 +180,21 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     buffer.close()
 
     if not buffer.is_ready():
-        return {"error": "Could not extract enough facial landmarks from the video. "
-                         "Ensure the face is clearly visible."}
+        return {
+            "error": "Could not extract enough facial landmarks from the video. "
+            "Ensure the face is clearly visible."
+        }
 
-    signal_matrix   = buffer.get_signal_matrix()
+    signal_matrix = buffer.get_signal_matrix()
     spectrogram_img = signals_to_spectrogram(signal_matrix)
-    proba           = engine.predict(spectrogram_img)
-    pred_idx        = int(np.argmax(proba))
-    pred_class      = CLASS_NAMES[pred_idx]
+    proba = engine.predict(spectrogram_img)
+    pred_idx = int(np.argmax(proba))
+    pred_class = CLASS_NAMES[pred_idx]
 
     return {
-        "proba":           proba,
+        "proba": proba,
         "predicted_class": pred_class,
-        "emotion_emoji":   EMOTION_EMOJIS.get(pred_class, "🎭"),
-        "signal_matrix":   signal_matrix,
+        "emotion_emoji": EMOTION_EMOJIS.get(pred_class, "🎭"),
+        "signal_matrix": signal_matrix,
         "spectrogram_img": spectrogram_img,
     }

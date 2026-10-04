@@ -24,7 +24,6 @@ import torch
 import torch.nn as nn
 from sklearn.manifold import TSNE
 from sklearn.metrics import (
-    ConfusionMatrixDisplay,
     classification_report,
     confusion_matrix,
     roc_auc_score,
@@ -33,37 +32,35 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from config import (
-    BEST_MODEL_PATH,
-    CLASS_NAMES,
-    MODEL_NAME,
-    NUM_CLASSES,
-    REPORTS_DIR,
-)
-from dataset import SpectrogramDataset, VAL_SPEC_DIR, get_val_transform
+from config import BEST_MODEL_PATH, CLASS_NAMES, MODEL_NAME, NUM_CLASSES, REPORTS_DIR
+from dataset import VAL_SPEC_DIR, SpectrogramDataset, get_val_transform
 from model import build_model
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 # ─── Shared plot style ────────────────────────────────────────────────────────
-DARK_BG   = "#0f172a"
-PANEL_BG  = "#1e293b"
-TEXT_CLR  = "#f1f5f9"
-ACCENT    = "#7c3aed"
-GRID_CLR  = "#334155"
+DARK_BG = "#0f172a"
+PANEL_BG = "#1e293b"
+TEXT_CLR = "#f1f5f9"
+ACCENT = "#7c3aed"
+GRID_CLR = "#334155"
 
-plt.rcParams.update({
-    "figure.facecolor": DARK_BG,
-    "axes.facecolor":   PANEL_BG,
-    "axes.edgecolor":   GRID_CLR,
-    "axes.labelcolor":  TEXT_CLR,
-    "xtick.color":      TEXT_CLR,
-    "ytick.color":      TEXT_CLR,
-    "text.color":       TEXT_CLR,
-    "grid.color":       GRID_CLR,
-    "font.family":      "DejaVu Sans",
-})
+plt.rcParams.update(
+    {
+        "figure.facecolor": DARK_BG,
+        "axes.facecolor": PANEL_BG,
+        "axes.edgecolor": GRID_CLR,
+        "axes.labelcolor": TEXT_CLR,
+        "xtick.color": TEXT_CLR,
+        "ytick.color": TEXT_CLR,
+        "text.color": TEXT_CLR,
+        "grid.color": GRID_CLR,
+        "font.family": "DejaVu Sans",
+    }
+)
 
 
 # ─── Inference ────────────────────────────────────────────────────────────────
@@ -87,8 +84,8 @@ def get_predictions(
     for images, labels in tqdm(loader, desc="Evaluating"):
         images = images.to(device, non_blocking=True)
         logits = model(images)
-        proba  = torch.softmax(logits, dim=1).cpu().numpy()
-        preds  = logits.argmax(dim=1).cpu().numpy()
+        proba = torch.softmax(logits, dim=1).cpu().numpy()
+        preds = logits.argmax(dim=1).cpu().numpy()
         all_true.extend(labels.numpy())
         all_pred.extend(preds)
         all_proba.extend(proba)
@@ -109,6 +106,7 @@ def extract_embeddings(
 
     # Register a forward hook on the Global Average Pooling output
     activation = {}
+
     def _hook(module, inp, out):
         activation["embed"] = out.squeeze().detach().cpu().numpy()
 
@@ -135,13 +133,21 @@ def extract_embeddings(
 
 
 # ─── Plot Functions ───────────────────────────────────────────────────────────
-def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, save_path: Path) -> None:
+def plot_confusion_matrix(
+    y_true: np.ndarray, y_pred: np.ndarray, save_path: Path
+) -> None:
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(
-        cm, annot=True, fmt="d", cmap="Purples",
-        xticklabels=CLASS_NAMES, yticklabels=CLASS_NAMES,
-        ax=ax, linewidths=0.5, linecolor=GRID_CLR,
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Purples",
+        xticklabels=CLASS_NAMES,
+        yticklabels=CLASS_NAMES,
+        ax=ax,
+        linewidths=0.5,
+        linecolor=GRID_CLR,
     )
     ax.set_xlabel("Predicted Label", fontsize=12)
     ax.set_ylabel("True Label", fontsize=12)
@@ -155,6 +161,7 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, save_path: Pat
 def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: Path) -> None:
     """Plot One-vs-Rest ROC curves for each emotion class."""
     from sklearn.preprocessing import label_binarize
+
     y_bin = label_binarize(y_true, classes=list(range(NUM_CLASSES)))
 
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -168,7 +175,9 @@ def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: Path) ->
     ax.plot([0, 1], [0, 1], "w--", linewidth=1, label="Random Classifier")
     ax.set_xlabel("False Positive Rate", fontsize=12)
     ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title("ROC Curves (One-vs-Rest) — Spectrogram FER", fontsize=14, fontweight="bold")
+    ax.set_title(
+        "ROC Curves (One-vs-Rest) — Spectrogram FER", fontsize=14, fontweight="bold"
+    )
     ax.legend(loc="lower right", fontsize=9, framealpha=0.2)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -188,10 +197,21 @@ def plot_tsne(embeddings: np.ndarray, labels: np.ndarray, save_path: Path) -> No
 
     for i, (cls_name, color) in enumerate(zip(CLASS_NAMES, colors)):
         mask = labels == i
-        ax.scatter(reduced[mask, 0], reduced[mask, 1],
-                   label=cls_name, color=color, alpha=0.7, s=30, edgecolors="none")
+        ax.scatter(
+            reduced[mask, 0],
+            reduced[mask, 1],
+            label=cls_name,
+            color=color,
+            alpha=0.7,
+            s=30,
+            edgecolors="none",
+        )
 
-    ax.set_title("t-SNE of CNN Feature Embeddings — Spectrogram FER", fontsize=14, fontweight="bold")
+    ax.set_title(
+        "t-SNE of CNN Feature Embeddings — Spectrogram FER",
+        fontsize=14,
+        fontweight="bold",
+    )
     ax.legend(loc="best", fontsize=10, framealpha=0.2)
     ax.set_xlabel("t-SNE Dim 1")
     ax.set_ylabel("t-SNE Dim 2")
@@ -214,7 +234,7 @@ def evaluate() -> None:
 
     # Load validation data
     val_dataset = SpectrogramDataset(VAL_SPEC_DIR, transform=get_val_transform())
-    val_loader  = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
     # Predictions
     y_true, y_pred, y_proba = get_predictions(model, val_loader, device)

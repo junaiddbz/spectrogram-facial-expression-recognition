@@ -27,7 +27,6 @@ import numpy as np
 from tqdm import tqdm
 
 from config import (
-    CHANNEL_SIGNAL_MAP,
     CLASS_NAMES,
     LANDMARK_SIGNALS,
     NUM_SIGNALS,
@@ -77,7 +76,7 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
     with mp_face_mesh.FaceMesh(
         static_image_mode=False,
         max_num_faces=1,
-        refine_landmarks=True,      # 478 landmarks (iris + lips precision)
+        refine_landmarks=True,  # 478 landmarks (iris + lips precision)
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     ) as face_mesh:
@@ -102,7 +101,7 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
             lm = results.multi_face_landmarks[0].landmark
 
             # Convert normalized [0,1] coords to pixel coords
-            pts = np.array([[l.x * w, l.y * h, l.z * w] for l in lm])
+            pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
 
             for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
                 dist = _euclidean(pts[idx_a], pts[idx_b])
@@ -115,7 +114,9 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
     # Quality check: reject if >40% frames failed
     total_frames = sum(len(v) for v in signals.values()) // NUM_SIGNALS
     if total_frames == 0 or failed_frames / max(total_frames, 1) > 0.4:
-        log.warning(f"Too many failed frames ({failed_frames}) in {video_path.name}. Skipping.")
+        log.warning(
+            f"Too many failed frames ({failed_frames}) in {video_path.name}. Skipping."
+        )
         return None
 
     # Resample each signal to fixed SIGNAL_LENGTH using linear interpolation
@@ -177,7 +178,9 @@ def process_dataset(data_dir: Path, output_dir: Path) -> None:
     train_indices = set(indices[:split_idx].tolist())
 
     success, failed = 0, 0
-    for i, (video_path, label, emotion_name) in enumerate(tqdm(all_videos, desc="Extracting signals")):
+    for i, (video_path, label, emotion_name) in enumerate(
+        tqdm(all_videos, desc="Extracting signals")
+    ):
         signals = extract_signals_from_video(video_path)
         if signals is None:
             failed += 1
@@ -188,19 +191,23 @@ def process_dataset(data_dir: Path, output_dir: Path) -> None:
         out_path = output_dir / out_name
         np.save(out_path, signals)
 
-        metadata.append({
-            "signal_path": str(out_path),
-            "video_path":  str(video_path),
-            "emotion":     emotion_name,
-            "label":       label,
-            "split":       split,
-        })
+        metadata.append(
+            {
+                "signal_path": str(out_path),
+                "video_path": str(video_path),
+                "emotion": emotion_name,
+                "label": label,
+                "split": split,
+            }
+        )
         success += 1
 
     # Save metadata CSV
     csv_path = output_dir / "signals_metadata.csv"
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["signal_path", "video_path", "emotion", "label", "split"])
+        writer = csv.DictWriter(
+            f, fieldnames=["signal_path", "video_path", "emotion", "label", "split"]
+        )
         writer.writeheader()
         writer.writerows(metadata)
 
@@ -210,9 +217,18 @@ def process_dataset(data_dir: Path, output_dir: Path) -> None:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract FAU signals from video dataset.")
-    parser.add_argument("--data_dir",   type=Path, required=True,  help="Root dir with per-emotion subfolders")
-    parser.add_argument("--output_dir", type=Path, default=SIGNALS_DIR, help="Output dir for .npy files")
+    parser = argparse.ArgumentParser(
+        description="Extract FAU signals from video dataset."
+    )
+    parser.add_argument(
+        "--data_dir",
+        type=Path,
+        required=True,
+        help="Root dir with per-emotion subfolders",
+    )
+    parser.add_argument(
+        "--output_dir", type=Path, default=SIGNALS_DIR, help="Output dir for .npy files"
+    )
     args = parser.parse_args()
 
     process_dataset(args.data_dir, args.output_dir)

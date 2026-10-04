@@ -26,8 +26,6 @@ from config import (
     NORMALIZE_STD,
     NUM_WORKERS,
     PIN_MEMORY,
-    RANDOM_SEED,
-    SPECTROGRAMS_DIR,
     TRAIN_SPEC_DIR,
     VAL_SPEC_DIR,
 )
@@ -71,7 +69,9 @@ class SpectrogramDataset(Dataset):
                 continue
             class_name = class_dir.name.lower()
             if class_name not in self.class_to_idx:
-                log.warning(f"Unrecognized class directory: {class_dir.name}. Skipping.")
+                log.warning(
+                    f"Unrecognized class directory: {class_dir.name}. Skipping."
+                )
                 continue
             label = self.class_to_idx[class_name]
             found_classes.add(class_name)
@@ -79,11 +79,15 @@ class SpectrogramDataset(Dataset):
                 self.samples.append((img_path, label))
 
         if not self.samples:
-            raise RuntimeError(f"No samples found in {self.root_dir}. "
-                               "Run make_spectrograms.py first.")
+            raise RuntimeError(
+                f"No samples found in {self.root_dir}. "
+                "Run make_spectrograms.py first."
+            )
 
-        log.info(f"Loaded {len(self.samples)} samples from {self.root_dir} "
-                 f"({len(found_classes)} classes)")
+        log.info(
+            f"Loaded {len(self.samples)} samples from {self.root_dir} "
+            f"({len(found_classes)} classes)"
+        )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -107,23 +111,27 @@ class SpectrogramDataset(Dataset):
 # ─── Transform Pipelines ──────────────────────────────────────────────────────
 def get_train_transform() -> transforms.Compose:
     """Augmented transform for training split."""
-    return transforms.Compose([
-        transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
-        transforms.RandomHorizontalFlip(p=AUG_HORIZONTAL_FLIP_P),
-        transforms.ColorJitter(**AUG_COLOR_JITTER),
-        transforms.RandomRotation(degrees=AUG_ROTATION_DEGREES),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
-    ])
+    return transforms.Compose(
+        [
+            transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
+            transforms.RandomHorizontalFlip(p=AUG_HORIZONTAL_FLIP_P),
+            transforms.ColorJitter(**AUG_COLOR_JITTER),
+            transforms.RandomRotation(degrees=AUG_ROTATION_DEGREES),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
+        ]
+    )
 
 
 def get_val_transform() -> transforms.Compose:
     """Deterministic transform for validation/inference."""
-    return transforms.Compose([
-        transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
-    ])
+    return transforms.Compose(
+        [
+            transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
+        ]
+    )
 
 
 # ─── DataLoader Factory ───────────────────────────────────────────────────────
@@ -147,14 +155,18 @@ def get_dataloaders(
         (train_loader, val_loader)
     """
     train_dataset = SpectrogramDataset(train_dir, transform=get_train_transform())
-    val_dataset   = SpectrogramDataset(val_dir,   transform=get_val_transform())
+    val_dataset = SpectrogramDataset(val_dir, transform=get_val_transform())
 
     train_sampler = None
     if use_weighted_sampler:
         counts = train_dataset.class_counts
-        total  = len(train_dataset)
-        weights_per_class = {cls: total / (len(counts) * cnt) for cls, cnt in counts.items()}
-        sample_weights = [weights_per_class[label] for _, label in train_dataset.samples]
+        total = len(train_dataset)
+        weights_per_class = {
+            cls: total / (len(counts) * cnt) for cls, cnt in counts.items()
+        }
+        sample_weights = [
+            weights_per_class[label] for _, label in train_dataset.samples
+        ]
         train_sampler = WeightedRandomSampler(
             weights=torch.DoubleTensor(sample_weights),
             num_samples=len(train_dataset),

@@ -12,9 +12,8 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import BATCH_SIZE, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH, NUM_CLASSES
-from model import CustomCNN, MobileNetV3FER, ResNet18FER, build_model
-
+from config import IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH, NUM_CLASSES  # noqa: E402
+from model import CustomCNN, MobileNetV3FER, ResNet18FER, build_model  # noqa: E402
 
 DUMMY_INPUT = torch.randn(2, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH)
 
@@ -25,7 +24,10 @@ class TestCustomCNN:
         model.eval()
         with torch.no_grad():
             out = model(DUMMY_INPUT)
-        assert out.shape == (2, NUM_CLASSES), f"Expected (2, {NUM_CLASSES}), got {out.shape}"
+        assert out.shape == (
+            2,
+            NUM_CLASSES,
+        ), f"Expected (2, {NUM_CLASSES}), got {out.shape}"
 
     def test_no_nan_in_output(self):
         model = CustomCNN()

@@ -103,12 +103,16 @@ def signals_to_spectrogram(signal_matrix: np.ndarray) -> np.ndarray:
     channels = []
     for _channel_label, signal_names_in_channel in CHANNEL_SIGNAL_MAP.items():
         # Average the STFT magnitudes of all signals in this channel group
-        stft_mags = [_compute_stft_magnitude(signal_dict[n]) for n in signal_names_in_channel]
+        stft_mags = [
+            _compute_stft_magnitude(signal_dict[n]) for n in signal_names_in_channel
+        ]
         avg_mag = np.mean(stft_mags, axis=0)  # (freq_bins, time_frames)
         channel_img = _normalize_to_uint8(avg_mag)
 
         # Resize to target image size
-        resized = cv2.resize(channel_img, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_LINEAR)
+        resized = cv2.resize(
+            channel_img, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_LINEAR
+        )
         channels.append(resized)
 
     # Stack into RGB image (H, W, 3)
@@ -128,8 +132,7 @@ def process_all_signals(signals_dir: Path, output_dir: Path) -> None:
     csv_path = signals_dir / "signals_metadata.csv"
     if not csv_path.exists():
         raise FileNotFoundError(
-            f"Metadata CSV not found at {csv_path}. "
-            "Run extract_signals.py first."
+            f"Metadata CSV not found at {csv_path}. " "Run extract_signals.py first."
         )
 
     df = pd.read_csv(csv_path)
@@ -139,8 +142,8 @@ def process_all_signals(signals_dir: Path, output_dir: Path) -> None:
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Generating spectrograms"):
         signal_path = Path(row["signal_path"])
-        emotion     = row["emotion"]
-        split       = row["split"]
+        emotion = row["emotion"]
+        split = row["split"]
 
         if not signal_path.exists():
             log.warning(f"Signal file not found: {signal_path}. Skipping.")
@@ -166,7 +169,9 @@ def process_all_signals(signals_dir: Path, output_dir: Path) -> None:
     log.info(f"Done. ✓ {success} spectrograms saved, ✗ {failed} failed.")
 
 
-def visualize_pipeline(signal_matrix: np.ndarray, title: str = "Pipeline Visualization") -> plt.Figure:
+def visualize_pipeline(
+    signal_matrix: np.ndarray, title: str = "Pipeline Visualization"
+) -> plt.Figure:
     """
     Generate a multi-panel figure showing:
     1. The raw FAU time-series signals
@@ -189,8 +194,6 @@ def visualize_pipeline(signal_matrix: np.ndarray, title: str = "Pipeline Visuali
     gs = fig.add_gridspec(3, n_signals, hspace=0.4, wspace=0.3)
 
     signal_dict = {name: signal_matrix[i] for i, name in enumerate(SIGNAL_NAMES)}
-    channel_colors = {"R": "#ef4444", "G": "#22c55e", "B": "#3b82f6"}
-    channel_colormaps = {"R": "Reds", "G": "Greens", "B": "Blues"}
 
     # Row 1: Raw signals
     for i, (name, signal) in enumerate(signal_dict.items()):
@@ -213,10 +216,12 @@ def visualize_pipeline(signal_matrix: np.ndarray, title: str = "Pipeline Visuali
         ax.tick_params(colors="gray", labelsize=6)
 
     # Row 3: Final composite RGB image
-    ax_rgb = fig.add_subplot(gs[2, n_signals // 2 - 1: n_signals // 2 + 2])
+    ax_rgb = fig.add_subplot(gs[2, n_signals // 2 - 1 : n_signals // 2 + 2])
     composite = signals_to_spectrogram(signal_matrix)
     ax_rgb.imshow(composite)
-    ax_rgb.set_title("Composite RGB Spectrogram (Input to CNN)", color="white", fontsize=10)
+    ax_rgb.set_title(
+        "Composite RGB Spectrogram (Input to CNN)", color="white", fontsize=10
+    )
     ax_rgb.axis("off")
 
     return fig

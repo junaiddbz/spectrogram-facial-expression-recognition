@@ -15,10 +15,7 @@ from typing import Literal
 import torch
 import torch.nn as nn
 from torchvision import models
-from torchvision.models import (
-    MobileNet_V3_Small_Weights,
-    ResNet18_Weights,
-)
+from torchvision.models import MobileNet_V3_Small_Weights, ResNet18_Weights
 
 from config import (
     DROPOUT_RATE,
@@ -62,13 +59,15 @@ class CustomCNN(nn.Module):
     Output: (B, NUM_CLASSES)
     """
 
-    def __init__(self, num_classes: int = NUM_CLASSES, dropout: float = DROPOUT_RATE) -> None:
+    def __init__(
+        self, num_classes: int = NUM_CLASSES, dropout: float = DROPOUT_RATE
+    ) -> None:
         super().__init__()
         self.features = nn.Sequential(
-            _ConvBlock(3, 32),    # → (B, 32, 112, 112)
-            _ConvBlock(32, 64),   # → (B, 64,  56,  56)
+            _ConvBlock(3, 32),  # → (B, 32, 112, 112)
+            _ConvBlock(32, 64),  # → (B, 64,  56,  56)
             _ConvBlock(64, 128),  # → (B, 128, 28,  28)
-            _ConvBlock(128, 256), # → (B, 256, 14,  14)
+            _ConvBlock(128, 256),  # → (B, 256, 14,  14)
         )
         self.pool = nn.AdaptiveAvgPool2d((4, 4))  # → (B, 256, 4, 4)
         self.classifier = nn.Sequential(
@@ -174,12 +173,14 @@ def build_model(model_name: ModelType = "resnet18") -> nn.Module:
         Initialized nn.Module
     """
     model_map = {
-        "resnet18":           ResNet18FER,
+        "resnet18": ResNet18FER,
         "mobilenet_v3_small": MobileNetV3FER,
-        "custom_cnn":         CustomCNN,
+        "custom_cnn": CustomCNN,
     }
     if model_name not in model_map:
-        raise ValueError(f"Unknown model: '{model_name}'. Choose from {list(model_map.keys())}")
+        raise ValueError(
+            f"Unknown model: '{model_name}'. Choose from {list(model_map.keys())}"
+        )
 
     model = model_map[model_name]()
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -204,13 +205,13 @@ def export_to_onnx(model: nn.Module, output_path: str, device: torch.device) -> 
         dummy_input,
         output_path,
         export_params=True,
-        opset_version=17,          # Opset 17 supported by onnxruntime 1.17.0
+        opset_version=17,  # Opset 17 supported by onnxruntime 1.17.0
         do_constant_folding=True,
         input_names=["spectrogram"],
         output_names=["logits"],
         dynamic_axes={
             "spectrogram": {0: "batch_size"},
-            "logits":      {0: "batch_size"},
+            "logits": {0: "batch_size"},
         },
     )
     log.info(f"ONNX model exported to: {output_path}")

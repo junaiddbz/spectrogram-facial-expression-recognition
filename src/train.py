@@ -19,7 +19,6 @@ Usage:
 import argparse
 import logging
 import time
-from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -56,7 +55,9 @@ log = logging.getLogger(__name__)
 # ─── Reproducibility ──────────────────────────────────────────────────────────
 def set_seed(seed: int = RANDOM_SEED) -> None:
     import random
+
     import numpy as np
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -87,7 +88,9 @@ def run_epoch(
 
     ctx = torch.enable_grad() if is_train else torch.no_grad()
     with ctx:
-        for images, labels in tqdm(loader, desc="Train" if is_train else "Val ", leave=False):
+        for images, labels in tqdm(
+            loader, desc="Train" if is_train else "Val ", leave=False
+        ):
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
@@ -151,16 +154,24 @@ def train(
             lr=lr * 5,  # Higher LR for head-only training
             weight_decay=WEIGHT_DECAY,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=STAGE1_EPOCHS)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=STAGE1_EPOCHS
+        )
 
         for epoch in range(1, STAGE1_EPOCHS + 1):
-            train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer, scaler, device, is_train=True)
-            val_loss, val_acc     = run_epoch(model, val_loader,   criterion, None,      scaler, device, is_train=False)
+            train_loss, train_acc = run_epoch(
+                model, train_loader, criterion, optimizer, scaler, device, is_train=True
+            )
+            val_loss, val_acc = run_epoch(
+                model, val_loader, criterion, None, scaler, device, is_train=False
+            )
             scheduler.step()
 
-            log.info(f"[S1 Ep {epoch:02d}/{STAGE1_EPOCHS}] "
-                     f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% || "
-                     f"Val Loss: {val_loss:.4f} | Acc: {val_acc:.2f}%")
+            log.info(
+                f"[S1 Ep {epoch:02d}/{STAGE1_EPOCHS}] "
+                f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% || "
+                f"Val Loss: {val_loss:.4f} | Acc: {val_acc:.2f}%"
+            )
 
         model.unfreeze_all()
 
@@ -172,31 +183,40 @@ def train(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     for epoch in range(1, epochs + 1):
-        train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer, scaler, device, is_train=True)
-        val_loss, val_acc     = run_epoch(model, val_loader,   criterion, None,      scaler, device, is_train=False)
+        train_loss, train_acc = run_epoch(
+            model, train_loader, criterion, optimizer, scaler, device, is_train=True
+        )
+        val_loss, val_acc = run_epoch(
+            model, val_loader, criterion, None, scaler, device, is_train=False
+        )
         scheduler.step()
 
         # TensorBoard logging
-        writer.add_scalars("Loss",     {"train": train_loss, "val": val_loss}, epoch)
-        writer.add_scalars("Accuracy", {"train": train_acc,  "val": val_acc},  epoch)
+        writer.add_scalars("Loss", {"train": train_loss, "val": val_loss}, epoch)
+        writer.add_scalars("Accuracy", {"train": train_acc, "val": val_acc}, epoch)
         writer.add_scalar("LR", scheduler.get_last_lr()[0], epoch)
 
-        log.info(f"[Ep {epoch:03d}/{epochs}] "
-                 f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% || "
-                 f"Val Loss: {val_loss:.4f} | Acc: {val_acc:.2f}%")
+        log.info(
+            f"[Ep {epoch:03d}/{epochs}] "
+            f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% || "
+            f"Val Loss: {val_loss:.4f} | Acc: {val_acc:.2f}%"
+        )
 
         # ── Best model checkpoint ──────────────────────────────────────────
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             patience_counter = 0
-            torch.save({
-                "epoch":        epoch,
-                "model_name":   model_name,
-                "model_state":  model.state_dict(),
-                "optimizer":    optimizer.state_dict(),
-                "val_acc":      val_acc,
-                "val_loss":     val_loss,
-            }, BEST_MODEL_PATH)
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_name": model_name,
+                    "model_state": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "val_acc": val_acc,
+                    "val_loss": val_loss,
+                },
+                BEST_MODEL_PATH,
+            )
             log.info(f"  ✓ New best model saved (Val Acc: {val_acc:.2f}%)")
         else:
             patience_counter += 1
@@ -208,8 +228,10 @@ def train(
 
         # ── Early stopping ────────────────────────────────────────────────
         if patience_counter >= EARLY_STOPPING_PATIENCE:
-            log.info(f"Early stopping triggered after {epoch} epochs. "
-                     f"Best Val Acc: {best_val_acc:.2f}%")
+            log.info(
+                f"Early stopping triggered after {epoch} epochs. "
+                f"Best Val Acc: {best_val_acc:.2f}%"
+            )
             break
 
     writer.close()
@@ -226,10 +248,14 @@ def train(
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the Spectrogram FER model.")
-    parser.add_argument("--model",      type=str, default=MODEL_NAME,  help="Model architecture name")
-    parser.add_argument("--epochs",     type=int, default=NUM_EPOCHS,   help="Max training epochs")
-    parser.add_argument("--batch_size", type=int, default=BATCH_SIZE,   help="Batch size")
-    parser.add_argument("--lr",         type=float, default=LEARNING_RATE, help="Learning rate")
+    parser.add_argument(
+        "--model", type=str, default=MODEL_NAME, help="Model architecture name"
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=NUM_EPOCHS, help="Max training epochs"
+    )
+    parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size")
+    parser.add_argument("--lr", type=float, default=LEARNING_RATE, help="Learning rate")
     args = parser.parse_args()
 
     train(

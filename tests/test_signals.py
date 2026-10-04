@@ -4,15 +4,15 @@ test_signals.py
 Unit tests for the signal extraction pipeline.
 """
 
-import numpy as np
-import pytest
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import NUM_SIGNALS, SIGNAL_LENGTH, SIGNAL_NAMES
-from make_spectrograms import (
+from config import NUM_SIGNALS, SIGNAL_LENGTH, SIGNAL_NAMES  # noqa: E402
+from make_spectrograms import (  # noqa: E402
     _compute_stft_magnitude,
     _normalize_to_uint8,
     signals_to_spectrogram,
@@ -68,10 +68,14 @@ class TestSpectrogramGeneration:
     def test_output_shape(self):
         """Spectrogram image should be (IMG_HEIGHT, IMG_WIDTH, 3)."""
         from config import IMG_HEIGHT, IMG_WIDTH
+
         matrix = self._dummy_matrix()
         img = signals_to_spectrogram(matrix)
-        assert img.shape == (IMG_HEIGHT, IMG_WIDTH, 3), \
-            f"Expected ({IMG_HEIGHT}, {IMG_WIDTH}, 3), got {img.shape}"
+        assert img.shape == (
+            IMG_HEIGHT,
+            IMG_WIDTH,
+            3,
+        ), f"Expected ({IMG_HEIGHT}, {IMG_WIDTH}, 3), got {img.shape}"
 
     def test_output_dtype(self):
         """Spectrogram image should be uint8."""
@@ -86,5 +90,6 @@ class TestSpectrogramGeneration:
 
     def test_signal_names_match_config(self):
         """Number of signal names in config must match NUM_SIGNALS."""
-        assert len(SIGNAL_NAMES) == NUM_SIGNALS, \
-            f"SIGNAL_NAMES length {len(SIGNAL_NAMES)} != NUM_SIGNALS {NUM_SIGNALS}"
+        assert (
+            len(SIGNAL_NAMES) == NUM_SIGNALS
+        ), f"SIGNAL_NAMES length {len(SIGNAL_NAMES)} != NUM_SIGNALS {NUM_SIGNALS}"

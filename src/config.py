@@ -6,7 +6,6 @@ All paths, hyperparameters, and constants are defined here.
 Modify this file to adapt the project to a new dataset or experiment.
 """
 
-import os
 from pathlib import Path
 
 # ─── Root Paths ───────────────────────────────────────────────────────────────
@@ -44,17 +43,17 @@ CLASS_NAMES = list(EMOTION_CLASSES.values())
 
 # ─── Facial Landmark Signal Configuration ────────────────────────────────────
 # MediaPipe Face Mesh landmark indices (478-point model)
-# Reference: https://github.com/google/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
+# Reference: https://github.com/google/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png  # noqa: E501
 
 LANDMARK_SIGNALS = {
     # (name, [landmark_idx_A, landmark_idx_B]) → Euclidean distance over time
-    "lip_aperture":    (13, 14),    # Upper-lower lip center gap (MAR)
-    "mouth_width":     (61, 291),   # Lip corner distance
+    "lip_aperture": (13, 14),  # Upper-lower lip center gap (MAR)
+    "mouth_width": (61, 291),  # Lip corner distance
     "left_brow_raise": (105, 159),  # Left eyebrow to left eye distance
-    "right_brow_raise":(334, 386),  # Right eyebrow to right eye distance
-    "left_eye_open":   (159, 145),  # Left eye vertical aperture
-    "right_eye_open":  (386, 374),  # Right eye vertical aperture
-    "jaw_open":        (152, 10),   # Chin to nose tip (jaw drop proxy)
+    "right_brow_raise": (334, 386),  # Right eyebrow to right eye distance
+    "left_eye_open": (159, 145),  # Left eye vertical aperture
+    "right_eye_open": (386, 374),  # Right eye vertical aperture
+    "jaw_open": (152, 10),  # Chin to nose tip (jaw drop proxy)
 }
 
 SIGNAL_NAMES = list(LANDMARK_SIGNALS.keys())
@@ -71,16 +70,16 @@ CHANNEL_SIGNAL_MAP = {
 }
 
 # ─── Signal Processing (STFT) Configuration ──────────────────────────────────
-VIDEO_FPS = 30                  # Assumed FPS of input videos
-SIGNAL_LENGTH = 90              # Number of frames per clip (3 seconds @ 30fps)
-STFT_NPERSEG = 16               # STFT window length (samples)
-STFT_NOVERLAP = 8               # STFT overlap (samples)
-STFT_NFFT = 32                  # FFT size
+VIDEO_FPS = 30  # Assumed FPS of input videos
+SIGNAL_LENGTH = 90  # Number of frames per clip (3 seconds @ 30fps)
+STFT_NPERSEG = 16  # STFT window length (samples)
+STFT_NOVERLAP = 8  # STFT overlap (samples)
+STFT_NFFT = 32  # FFT size
 
 # ─── Spectrogram Image Configuration ─────────────────────────────────────────
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
-IMG_CHANNELS = 3                # RGB (one channel per signal group)
+IMG_CHANNELS = 3  # RGB (one channel per signal group)
 
 # ─── Dataset Split ────────────────────────────────────────────────────────────
 TRAIN_RATIO = 0.80
@@ -93,19 +92,19 @@ NUM_EPOCHS = 50
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 EARLY_STOPPING_PATIENCE = 10
-NUM_WORKERS = 4                 # DataLoader workers (set 0 on Windows if issues)
-PIN_MEMORY = True               # Set False if not using CUDA
+NUM_WORKERS = 4  # DataLoader workers (set 0 on Windows if issues)
+PIN_MEMORY = True  # Set False if not using CUDA
 
 # ─── Model Configuration ─────────────────────────────────────────────────────
-MODEL_NAME = "resnet18"         # Options: "resnet18", "mobilenet_v3_small", "custom_cnn"
-PRETRAINED = True               # Use ImageNet pretrained weights
+MODEL_NAME = "resnet18"  # Options: "resnet18", "mobilenet_v3_small", "custom_cnn"
+PRETRAINED = True  # Use ImageNet pretrained weights
 DROPOUT_RATE = 0.5
 FC_HIDDEN_DIM = 256
 
 # ─── Checkpoint & Export ──────────────────────────────────────────────────────
 BEST_MODEL_PATH = MODELS_DIR / "best_model.pth"
 ONNX_MODEL_PATH = MODELS_DIR / "best_model.onnx"
-CHECKPOINT_INTERVAL = 5        # Save checkpoint every N epochs
+CHECKPOINT_INTERVAL = 5  # Save checkpoint every N epochs
 
 # ─── Augmentation (Training only) ─────────────────────────────────────────────
 AUG_HORIZONTAL_FLIP_P = 0.5
@@ -114,4 +113,4 @@ AUG_ROTATION_DEGREES = 5
 
 # ─── Normalization (ImageNet stats for pretrained models) ─────────────────────
 NORMALIZE_MEAN = [0.485, 0.456, 0.406]
-NORMALIZE_STD  = [0.229, 0.224, 0.225]
+NORMALIZE_STD = [0.229, 0.224, 0.225]

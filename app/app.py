@@ -19,20 +19,20 @@ import cv2
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
-from PIL import Image
 
 # ─── Path setup ───────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.extend([str(ROOT / "src"), str(ROOT / "app")])
 
-from config import CLASS_NAMES, ONNX_MODEL_PATH, SIGNAL_NAMES
-from inference import (
+from inference import (  # noqa: E402
     EMOTION_EMOJIS,
     FacialSignalBuffer,
     ONNXInferenceEngine,
     predict_from_video,
 )
-from make_spectrograms import signals_to_spectrogram
+
+from config import CLASS_NAMES, ONNX_MODEL_PATH, SIGNAL_NAMES  # noqa: E402
+from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
 # ─── Page Configuration ───────────────────────────────────────────────────────
 st.set_page_config(
@@ -43,7 +43,8 @@ st.set_page_config(
 )
 
 # ─── Custom CSS ───────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
 
@@ -84,7 +85,9 @@ st.markdown("""
   }
   div[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #1e293b; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ─── Model Loading (cached) ───────────────────────────────────────────────────
@@ -122,10 +125,12 @@ with st.sidebar:
 
 
 # ─── Main Header ──────────────────────────────────────────────────────────────
-st.markdown('<h1 class="hero-title">🎭 Spectrogram FER System</h1>', unsafe_allow_html=True)
+st.markdown(
+    '<h1 class="hero-title">🎭 Spectrogram FER System</h1>', unsafe_allow_html=True
+)
 st.markdown(
     '<p class="hero-sub">Emotion recognition via Signal Processing · '
-    'MediaPipe → STFT Spectrograms → ResNet-18</p>',
+    "MediaPipe → STFT Spectrograms → ResNet-18</p>",
     unsafe_allow_html=True,
 )
 
@@ -140,7 +145,9 @@ if engine is None:
 
 
 # ─── Input Tabs ───────────────────────────────────────────────────────────────
-tab_upload, tab_webcam, tab_demo = st.tabs(["📁 Upload Video", "📷 Webcam", "🎬 Demo Samples"])
+tab_upload, tab_webcam, tab_demo = st.tabs(
+    ["📁 Upload Video", "📷 Webcam", "🎬 Demo Samples"]
+)
 
 result = None
 
@@ -162,7 +169,7 @@ with tab_upload:
 # ── Tab 2: Webcam ─────────────────────────────────────────────────────────────
 with tab_webcam:
     st.info(
-        "📌 Webcam capture requires running the app **locally** (not supported on Hugging Face Spaces). "
+        "📌 Webcam capture requires running the app **locally** (not supported on Hugging Face Spaces). "  # noqa: E501
         "Run `streamlit run app/app.py` on your machine.",
         icon="ℹ️",
     )
@@ -184,8 +191,13 @@ with tab_webcam:
                     break
                 buffer.push_frame(frame)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
-                progress.progress((i + 1) / CAPTURE_FRAMES, text=f"Capturing... {i+1}/{CAPTURE_FRAMES} frames")
+                frame_placeholder.image(
+                    frame_rgb, channels="RGB", use_column_width=True
+                )
+                progress.progress(
+                    (i + 1) / CAPTURE_FRAMES,
+                    text=f"Capturing... {i+1}/{CAPTURE_FRAMES} frames",
+                )
 
             cap.release()
             buffer.close()
@@ -193,11 +205,11 @@ with tab_webcam:
 
             if buffer.is_ready():
                 with st.spinner("Running inference..."):
-                    signal_matrix   = buffer.get_signal_matrix()
+                    signal_matrix = buffer.get_signal_matrix()
                     spectrogram_img = signals_to_spectrogram(signal_matrix)
-                    proba           = engine.predict(spectrogram_img)
-                    pred_idx        = int(np.argmax(proba))
-                    pred_class      = CLASS_NAMES[pred_idx]
+                    proba = engine.predict(spectrogram_img)
+                    pred_idx = int(np.argmax(proba))
+                    pred_class = CLASS_NAMES[pred_idx]
                     result = {
                         "proba": proba,
                         "predicted_class": pred_class,
@@ -206,12 +218,16 @@ with tab_webcam:
                         "spectrogram_img": spectrogram_img,
                     }
             else:
-                st.warning("Not enough frames with a detected face. Try again in better lighting.")
+                st.warning(
+                    "Not enough frames with a detected face. Try again in better lighting."
+                )
 
 
 # ── Tab 3: Demo Samples ────────────────────────────────────────────────────────
 with tab_demo:
-    st.info("Demo samples can be added to `app/demo_samples/` after training.", icon="📌")
+    st.info(
+        "Demo samples can be added to `app/demo_samples/` after training.", icon="📌"
+    )
 
 
 # ─── Results Panel ────────────────────────────────────────────────────────────
@@ -226,34 +242,42 @@ if result is not None:
 
         # ── Prediction card ───────────────────────────────────────────────
         with col_pred:
-            proba        = result["proba"]
-            pred_class   = result["predicted_class"]
-            emoji        = result["emotion_emoji"]
-            confidence   = float(np.max(proba)) * 100
+            proba = result["proba"]
+            pred_class = result["predicted_class"]
+            emoji = result["emotion_emoji"]
+            confidence = float(np.max(proba)) * 100
 
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="metric-card">
               <div class="emotion-label">{emoji}</div>
               <div class="emotion-name">{pred_class}</div>
               <div class="confidence">Confidence: {confidence:.1f}%</div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
             st.markdown("<br>", unsafe_allow_html=True)
 
             # Bar chart of all probabilities
             colors = ["#7c3aed" if c == pred_class else "#334155" for c in CLASS_NAMES]
-            fig_bar = go.Figure(go.Bar(
-                x=CLASS_NAMES,
-                y=(proba * 100).tolist(),
-                marker_color=colors,
-                text=[f"{p*100:.1f}%" for p in proba],
-                textposition="outside",
-            ))
+            fig_bar = go.Figure(
+                go.Bar(
+                    x=CLASS_NAMES,
+                    y=(proba * 100).tolist(),
+                    marker_color=colors,
+                    text=[f"{p*100:.1f}%" for p in proba],
+                    textposition="outside",
+                )
+            )
             fig_bar.update_layout(
-                paper_bgcolor="#0f172a", plot_bgcolor="#1e293b",
+                paper_bgcolor="#0f172a",
+                plot_bgcolor="#1e293b",
                 font=dict(color="#cbd5e1", size=11),
-                yaxis=dict(title="Probability (%)", range=[0, 105], gridcolor="#334155"),
+                yaxis=dict(
+                    title="Probability (%)", range=[0, 105], gridcolor="#334155"
+                ),
                 xaxis=dict(tickangle=-30),
                 margin=dict(l=20, r=20, t=30, b=40),
                 height=320,
@@ -279,20 +303,31 @@ if result is not None:
             signal_matrix = result["signal_matrix"]
             t = np.linspace(0, signal_matrix.shape[1] / 30, signal_matrix.shape[1])
 
-            palette = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#7c3aed", "#ec4899"]
+            palette = [
+                "#ef4444",
+                "#f97316",
+                "#eab308",
+                "#22c55e",
+                "#06b6d4",
+                "#7c3aed",
+                "#ec4899",
+            ]
 
             fig_sig = go.Figure()
             for i, name in enumerate(SIGNAL_NAMES):
-                fig_sig.add_trace(go.Scatter(
-                    x=t.tolist(),
-                    y=signal_matrix[i].tolist(),
-                    mode="lines",
-                    name=name.replace("_", " ").title(),
-                    line=dict(color=palette[i % len(palette)], width=1.5),
-                ))
+                fig_sig.add_trace(
+                    go.Scatter(
+                        x=t.tolist(),
+                        y=signal_matrix[i].tolist(),
+                        mode="lines",
+                        name=name.replace("_", " ").title(),
+                        line=dict(color=palette[i % len(palette)], width=1.5),
+                    )
+                )
 
             fig_sig.update_layout(
-                paper_bgcolor="#0f172a", plot_bgcolor="#1e293b",
+                paper_bgcolor="#0f172a",
+                plot_bgcolor="#1e293b",
                 font=dict(color="#cbd5e1", size=10),
                 xaxis=dict(title="Time (s)", gridcolor="#334155"),
                 yaxis=dict(title="Normalized Distance", gridcolor="#334155"),
