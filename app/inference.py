@@ -152,27 +152,33 @@ class FacialSignalBuffer:
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer."""
         matrix = []
+        
+        # Create a smooth S-curve from 0 to 1 to simulate a perfect facial muscle contraction.
+        # This perfectly mimics the natural acceleration/deceleration of the CK+ dataset clips.
+        curve = (1 - np.cos(np.linspace(0, np.pi, SIGNAL_LENGTH))) / 2
+        
         for name in SIGNAL_NAMES:
-            raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
-            
-            # Inject neutral baseline at the start of the window.
-            # The CNN was trained on CK+ clips that ALWAYS start from a neutral face and transition to an emotion.
-            # By forcing the first 25 frames of our sliding window to be the baseline neutral face,
-            # we ensure that held/static emotions generate strong "transition" STFT frequencies 
-            # (Neutral -> Current state) rather than appearing as flat lines (which the CNN misinterprets as Sad).
-            if self.baseline is not None and len(raw) == self.window_size:
+            if self.baseline is not None and len(self.buffer[name]) > 0:
+                # Bypass temporal history noise entirely!
+                # Synthesize a clean, idealized transition from Neutral to the Current frame.
                 base = self.baseline[name]
-                raw[:25] = base
-                # Linear ramp to blend the neutral baseline into the current signal's recent history
-                ramp = np.linspace(base, raw[35], 10)
-                raw[25:35] = ramp
                 
-            resampled = np.interp(
-                np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
-                np.arange(len(raw)),
-                raw,
-            )
-            matrix.append(resampled)
+                # Use a micro-averaged current value to prevent single-frame jitter
+                recent_history = self.buffer[name][-5:]
+                current = np.mean(recent_history) if len(recent_history) > 0 else self.buffer[name][-1]
+                
+                synthesized = base + (current - base) * curve
+                matrix.append(synthesized.astype(np.float32))
+            else:
+                # Fallback if no baseline yet
+                raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
+                resampled = np.interp(
+                    np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
+                    np.arange(len(raw)),
+                    raw,
+                )
+                matrix.append(resampled)
+                
         return np.array(matrix, dtype=np.float32)
 
     def close(self) -> None:
