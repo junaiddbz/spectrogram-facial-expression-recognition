@@ -376,7 +376,9 @@ if result is not None:
         st.markdown('<p class="section-label">Analysis Results</p>', unsafe_allow_html=True)
 
         if "annotated_video_path" in result:
-            st.video(result["annotated_video_path"])
+            col_v1, col_v2, col_v3 = st.columns([1, 2, 1])
+            with col_v2:
+                st.video(result["annotated_video_path"])
             st.markdown("<br>", unsafe_allow_html=True)
 
         col_pred, col_spec, col_signals = st.columns([1, 1.3, 1.7])
