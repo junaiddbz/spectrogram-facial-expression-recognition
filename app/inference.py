@@ -127,7 +127,9 @@ class FacialSignalBuffer:
             return False
 
         lm = results.multi_face_landmarks[0].landmark
-        pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
+        pts = np.array(
+            [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
+        )
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
         for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():

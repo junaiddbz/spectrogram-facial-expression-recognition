@@ -101,7 +101,9 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
             lm = results.multi_face_landmarks[0].landmark
 
             # Convert normalized [0,1] coords to pixel coords
-            pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
+            pts = np.array(
+                [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
+            )
 
             for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
                 dist = _euclidean(pts[idx_a], pts[idx_b])
