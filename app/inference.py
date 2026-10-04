@@ -146,32 +146,42 @@ class FacialSignalBuffer:
         return True
 
     def is_ready(self) -> bool:
-        """Buffer has enough frames for a full spectrogram."""
-        return all(len(v) >= self.window_size for v in self.buffer.values())
+        # Ready as soon as we have a neutral baseline (first 15 frames / 0.5 seconds)
+        # This completely eliminates the 3-second startup "Buffering..." lag.
+        return self.baseline is not None
 
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer."""
         matrix = []
-        
-        # Create a smooth S-curve from 0 to 1 to simulate a perfect facial muscle contraction.
-        # This perfectly mimics the natural acceleration/deceleration of the CK+ dataset clips.
-        curve = (1 - np.cos(np.linspace(0, np.pi, SIGNAL_LENGTH))) / 2
-        
         for name in SIGNAL_NAMES:
-            if self.baseline is not None and len(self.buffer[name]) > 0:
-                # Bypass temporal history noise entirely!
-                # Synthesize a clean, idealized transition from Neutral to the Current frame.
+            if self.baseline is not None:
+                # We use ONLY the last 30 frames (1 second) of actual facial history.
+                # This guarantees that old emotions don't linger in the 3-second window
+                # and cause a massive prediction lag.
+                actual_history = np.array(self.buffer[name][-30:], dtype=np.float32)
+                hist_len = len(actual_history)
+                
+                # Fill the window with the Neutral baseline
                 base = self.baseline[name]
+                raw = np.full(SIGNAL_LENGTH, base, dtype=np.float32)
                 
-                # Use a micro-averaged current value to prevent single-frame jitter
-                recent_history = self.buffer[name][-5:]
-                current = np.mean(recent_history) if len(recent_history) > 0 else self.buffer[name][-1]
+                if hist_len > 0:
+                    # Place actual recent history at the very end of the 90-frame window
+                    raw[-hist_len:] = actual_history
+                    
+                    # Create a smooth 10-frame transition from Neutral to the start of this history
+                    ramp_start = SIGNAL_LENGTH - hist_len - 10
+                    if ramp_start >= 0:
+                        ramp = np.linspace(base, actual_history[0], 10)
+                        raw[ramp_start : ramp_start + 10] = ramp
                 
-                synthesized = base + (current - base) * curve
-                matrix.append(synthesized.astype(np.float32))
+                # No resampling needed since `raw` is exactly perfectly crafted to SIGNAL_LENGTH
+                matrix.append(raw)
             else:
-                # Fallback if no baseline yet
+                # Fallback if somehow called before baseline
                 raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
+                if len(raw) == 0:
+                    raw = np.zeros(SIGNAL_LENGTH, dtype=np.float32)
                 resampled = np.interp(
                     np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
                     np.arange(len(raw)),
