@@ -37,6 +37,7 @@ data/processed/spectrograms/*
 models/*.pth
 models/*.pt
 models/*.onnx
+!models/best_model.onnx
 !models/.gitkeep
 
 # =============================================================================

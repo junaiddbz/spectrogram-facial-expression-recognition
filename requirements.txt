@@ -4,7 +4,7 @@ torchvision==0.17.0
 torchaudio==2.2.0
 
 # ─── Computer Vision & Landmark Detection ────────────────────────────────────
-opencv-python==4.9.0.80
+opencv-python-headless==4.9.0.80
 mediapipe==0.10.9
 Pillow==10.2.0
 
