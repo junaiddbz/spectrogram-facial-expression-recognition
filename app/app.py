@@ -281,7 +281,7 @@ with tab_webcam:
                     break
                 buffer.push_frame(frame)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+                frame_placeholder.image(frame_rgb, channels="RGB", width='stretch')
                 progress.progress(
                     (i + 1) / CAPTURE_FRAMES,
                     text=f"Capturing... {i+1}/{CAPTURE_FRAMES} frames",
@@ -345,7 +345,7 @@ with tab_demo:
                     unsafe_allow_html=True,
                 )
                 st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-                if st.button(f"Run — {name}", key=f"demo_{name}", use_container_width=True):
+                if st.button(f"Run — {name}", key=f"demo_{name}", width='stretch'):
                     selected_demo = path
 
         if selected_demo is not None:
@@ -422,7 +422,7 @@ if result is not None:
                 height=280,
                 showlegend=False,
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
 
         # ── Spectrogram image ─────────────────────────────────────────────
         with col_spec:
@@ -432,7 +432,7 @@ if result is not None:
             st.image(
                 result["spectrogram_img"],
                 caption="RGB Spectrogram — CNN Input  |  R=Mouth  G=Brow  B=Eye/Jaw",
-                use_column_width=True,
+                width='stretch',
             )
 
         # ── FAU signal waveforms ──────────────────────────────────────────
@@ -485,4 +485,4 @@ if result is not None:
                 margin=dict(l=10, r=10, t=10, b=40),
                 height=340,
             )
-            st.plotly_chart(fig_sig, use_container_width=True)
+            st.plotly_chart(fig_sig, width='stretch')
