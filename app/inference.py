@@ -6,14 +6,11 @@ Standalone inference engine for the Streamlit app.
 Handles the full pipeline:
   Video/Webcam Frame → MediaPipe Landmarks → FAU Signals → STFT Spectrogram → CNN → Emotion
 
-Supports both PyTorch (.pth) and ONNX (.onnx) backends.
-ONNX is preferred for CPU-only environments (Hugging Face Spaces).
-
-Uses the MediaPipe Tasks API (mediapipe >= 0.10.x) for face landmark detection.
+Uses ONNX Runtime for CPU-only inference (no PyTorch required at runtime).
+Uses MediaPipe Face Mesh via the legacy mp.solutions API (mediapipe < 0.10.14).
 """
 
 import sys
-import urllib.request
 from pathlib import Path
 
 import cv2
@@ -37,32 +34,19 @@ from config import (  # noqa: E402
 )
 from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
-# ─── MediaPipe Task Model Download ───────────────────────────────────────────
-_TASK_MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/"
-    "face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-)
-_TASK_MODEL_PATH = Path(__file__).resolve().parent / "face_landmarker.task"
-
-
-def _ensure_task_model() -> Path:
-    """Download the MediaPipe face landmarker task file if not already present."""
-    if not _TASK_MODEL_PATH.exists():
-        urllib.request.urlretrieve(_TASK_MODEL_URL, _TASK_MODEL_PATH)
-    return _TASK_MODEL_PATH
-
+mp_face_mesh = mp.solutions.face_mesh
 
 EMOTION_EMOJIS = {
-    "Angry": "😠",
-    "Contempt": "😒",
-    "Disgust": "🤢",
-    "Fear": "😨",
-    "Happy": "😊",
-    "Sadness": "😢",
-    "Surprise": "😲",
-    "Neutral": "😐",
-    "Calm": "😌",
-    "Sad": "😢",
+    "Angry": "Angry",
+    "Contempt": "Contempt",
+    "Disgust": "Disgust",
+    "Fear": "Fear",
+    "Happy": "Happy",
+    "Sadness": "Sadness",
+    "Surprise": "Surprise",
+    "Neutral": "Neutral",
+    "Calm": "Calm",
+    "Sad": "Sad",
 }
 
 
@@ -111,26 +95,20 @@ class ONNXInferenceEngine:
 class FacialSignalBuffer:
     """
     Maintains a rolling buffer of FAU distance signals from video frames.
-    Uses the MediaPipe Tasks FaceLandmarker API (compatible with mediapipe >= 0.10.x).
+    Used for real-time webcam inference.
     """
 
     def __init__(self, window_size: int = SIGNAL_LENGTH) -> None:
-        from mediapipe.tasks import python as mp_python
-        from mediapipe.tasks.python import vision as mp_vision
-
         self.window_size = window_size
         self.buffer = {name: [] for name in SIGNAL_NAMES}
-        self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
-
-        task_path = _ensure_task_model()
-        base_options = mp_python.BaseOptions(model_asset_path=str(task_path))
-        options = mp_vision.FaceLandmarkerOptions(
-            base_options=base_options,
-            running_mode=mp_vision.RunningMode.VIDEO,
-            num_faces=1,
+        self.face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
         )
-        self._detector = mp_vision.FaceLandmarker.create_from_options(options)
-        self._frame_idx = 0
+        self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -141,14 +119,9 @@ class FacialSignalBuffer:
         """
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         h, w = frame_bgr.shape[:2]
+        results = self.face_mesh.process(rgb)
 
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        # Use timestamp_ms for VIDEO mode
-        timestamp_ms = int(self._frame_idx * (1000 / 30))
-        self._frame_idx += 1
-        results = self._detector.detect_for_video(mp_image, timestamp_ms)
-
-        if not results.face_landmarks:
+        if not results.multi_face_landmarks:
             for name in SIGNAL_NAMES:
                 val = self.last_values[name]
                 self.buffer[name].append(val)
@@ -156,8 +129,10 @@ class FacialSignalBuffer:
                     self.buffer[name].pop(0)
             return False
 
-        lm = results.face_landmarks[0]
-        pts = np.array([[p.x * w, p.y * h, p.z * w] for p in lm])
+        lm = results.multi_face_landmarks[0].landmark
+        pts = np.array(
+            [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
+        )
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
         for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
@@ -186,7 +161,7 @@ class FacialSignalBuffer:
         return np.array(matrix, dtype=np.float32)
 
     def close(self) -> None:
-        self._detector.close()
+        self.face_mesh.close()
 
 
 # ─── Full Inference Pipeline ──────────────────────────────────────────────────
@@ -195,7 +170,7 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     Run the full pipeline on an uploaded video file.
 
     Returns:
-        dict with keys: proba, predicted_class, emotion_emoji, signal_matrix, spectrogram_img
+        dict with keys: proba, predicted_class, signal_matrix, spectrogram_img
     """
     buffer = FacialSignalBuffer()
     cap = cv2.VideoCapture(video_path)
@@ -224,7 +199,6 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     return {
         "proba": proba,
         "predicted_class": pred_class,
-        "emotion_emoji": EMOTION_EMOJIS.get(pred_class, "🎭"),
         "signal_matrix": signal_matrix,
         "spectrogram_img": spectrogram_img,
     }
