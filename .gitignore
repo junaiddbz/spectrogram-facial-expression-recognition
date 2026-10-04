@@ -88,3 +88,6 @@ tensorboard_logs/
 *.bak
 *.orig
 .cache/
+
+# HuggingFace deployment
+huggingface_app/
