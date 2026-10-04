@@ -164,16 +164,32 @@ class FacialSignalBuffer:
 def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     """
     Run the full pipeline on an uploaded video file.
-    Also generates an annotated video output with face bounding boxes.
+    Uses a sliding window to predict changing emotions across the entire video dynamically.
     """
     buffer = FacialSignalBuffer()
     cap = cv2.VideoCapture(video_path)
+
+    frame_predictions = []
+    last_pred = ("Buffering...", 0.0)
+    frame_count = 0
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+            
         buffer.push_frame(frame)
+        
+        # Sliding window dynamic prediction: predict every 3 frames to optimize speed
+        if buffer.is_ready() and frame_count % 3 == 0:
+            signal_matrix = buffer.get_signal_matrix()
+            spectrogram_img = signals_to_spectrogram(signal_matrix)
+            proba = engine.predict(spectrogram_img)
+            pred_idx = int(np.argmax(proba))
+            last_pred = (CLASS_NAMES[pred_idx], float(np.max(proba)) * 100)
+            
+        frame_predictions.append(last_pred)
+        frame_count += 1
 
     cap.release()
     buffer.close()
@@ -184,15 +200,14 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
             "Ensure the face is clearly visible."
         }
 
-    # 1. Run inference
+    # 1. Final state for the static UI displays (last 3 seconds)
     signal_matrix = buffer.get_signal_matrix()
     spectrogram_img = signals_to_spectrogram(signal_matrix)
     proba = engine.predict(spectrogram_img)
     pred_idx = int(np.argmax(proba))
-    pred_class = CLASS_NAMES[pred_idx]
-    confidence = float(np.max(proba)) * 100
+    final_class = CLASS_NAMES[pred_idx]
 
-    # 2. Render Annotated Output Video
+    # 2. Render Annotated Output Video with dynamic labels
     out_path = tempfile.NamedTemporaryFile(suffix=".webm", delete=False).name
     cap = cv2.VideoCapture(video_path)
     
@@ -203,12 +218,10 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # VP80 codec in webm format works exceptionally well across all browsers
     fourcc = cv2.VideoWriter_fourcc(*'VP80')
     out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
     
     frame_idx = 0
-    # BGR color for the bounding box (indigo accent)
     box_color = (241, 102, 99) 
     
     while True:
@@ -219,21 +232,26 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
         if frame_idx < len(buffer.bboxes) and buffer.bboxes[frame_idx] is not None:
             x1, y1, x2, y2 = buffer.bboxes[frame_idx]
             
+            # Get the dynamic prediction for THIS exact frame
+            dyn_class, dyn_conf = frame_predictions[frame_idx]
+            
             # Draw Face Box
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
             
             # Draw Emotion Text Background
-            text = f"{pred_class} {confidence:.1f}%"
+            if dyn_class == "Buffering...":
+                text = dyn_class
+            else:
+                text = f"{dyn_class} {dyn_conf:.1f}%"
+                
             font = cv2.FONT_HERSHEY_DUPLEX
             font_scale = 0.6
             thickness = 1
             (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
             
-            # Ensure text background doesn't clip top of frame
             bg_y1 = max(0, y1 - th - 10)
             cv2.rectangle(frame, (x1, bg_y1), (x1 + tw + 10, bg_y1 + th + 10), box_color, -1)
             
-            # Draw Text
             cv2.putText(frame, text, (x1 + 5, bg_y1 + th + 5), font, font_scale, (255, 255, 255), thickness)
             
         out.write(frame)
@@ -244,7 +262,7 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
 
     return {
         "proba": proba,
-        "predicted_class": pred_class,
+        "predicted_class": final_class,
         "signal_matrix": signal_matrix,
         "spectrogram_img": spectrogram_img,
         "annotated_video_path": out_path,
