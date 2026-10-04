@@ -88,9 +88,7 @@ def run_epoch(
 
     ctx = torch.enable_grad() if is_train else torch.no_grad()
     with ctx:
-        for images, labels in tqdm(
-            loader, desc="Train" if is_train else "Val ", leave=False
-        ):
+        for images, labels in tqdm(loader, desc="Train" if is_train else "Val ", leave=False):
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
@@ -154,9 +152,7 @@ def train(
             lr=lr * 5,  # Higher LR for head-only training
             weight_decay=WEIGHT_DECAY,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=STAGE1_EPOCHS
-        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=STAGE1_EPOCHS)
 
         for epoch in range(1, STAGE1_EPOCHS + 1):
             train_loss, train_acc = run_epoch(
@@ -248,12 +244,8 @@ def train(
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the Spectrogram FER model.")
-    parser.add_argument(
-        "--model", type=str, default=MODEL_NAME, help="Model architecture name"
-    )
-    parser.add_argument(
-        "--epochs", type=int, default=NUM_EPOCHS, help="Max training epochs"
-    )
+    parser.add_argument("--model", type=str, default=MODEL_NAME, help="Model architecture name")
+    parser.add_argument("--epochs", type=int, default=NUM_EPOCHS, help="Max training epochs")
     parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size")
     parser.add_argument("--lr", type=float, default=LEARNING_RATE, help="Learning rate")
     args = parser.parse_args()

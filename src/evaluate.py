@@ -23,12 +23,7 @@ import seaborn as sns
 import torch
 import torch.nn as nn
 from sklearn.manifold import TSNE
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
-    roc_auc_score,
-    roc_curve,
-)
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -37,9 +32,7 @@ from dataset import VAL_SPEC_DIR, SpectrogramDataset, get_val_transform
 from model import build_model
 
 log = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # ─── Shared plot style ────────────────────────────────────────────────────────
 DARK_BG = "#0f172a"
@@ -133,9 +126,7 @@ def extract_embeddings(
 
 
 # ─── Plot Functions ───────────────────────────────────────────────────────────
-def plot_confusion_matrix(
-    y_true: np.ndarray, y_pred: np.ndarray, save_path: Path
-) -> None:
+def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, save_path: Path) -> None:
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(
@@ -175,9 +166,7 @@ def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: Path) ->
     ax.plot([0, 1], [0, 1], "w--", linewidth=1, label="Random Classifier")
     ax.set_xlabel("False Positive Rate", fontsize=12)
     ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title(
-        "ROC Curves (One-vs-Rest) — Spectrogram FER", fontsize=14, fontweight="bold"
-    )
+    ax.set_title("ROC Curves (One-vs-Rest) — Spectrogram FER", fontsize=14, fontweight="bold")
     ax.legend(loc="lower right", fontsize=9, framealpha=0.2)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()

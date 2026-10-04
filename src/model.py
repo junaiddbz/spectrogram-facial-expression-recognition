@@ -59,9 +59,7 @@ class CustomCNN(nn.Module):
     Output: (B, NUM_CLASSES)
     """
 
-    def __init__(
-        self, num_classes: int = NUM_CLASSES, dropout: float = DROPOUT_RATE
-    ) -> None:
+    def __init__(self, num_classes: int = NUM_CLASSES, dropout: float = DROPOUT_RATE) -> None:
         super().__init__()
         self.features = nn.Sequential(
             _ConvBlock(3, 32),  # → (B, 32, 112, 112)
@@ -178,9 +176,7 @@ def build_model(model_name: ModelType = "resnet18") -> nn.Module:
         "custom_cnn": CustomCNN,
     }
     if model_name not in model_map:
-        raise ValueError(
-            f"Unknown model: '{model_name}'. Choose from {list(model_map.keys())}"
-        )
+        raise ValueError(f"Unknown model: '{model_name}'. Choose from {list(model_map.keys())}")
 
     model = model_map[model_name]()
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

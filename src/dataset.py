@@ -69,9 +69,7 @@ class SpectrogramDataset(Dataset):
                 continue
             class_name = class_dir.name.lower()
             if class_name not in self.class_to_idx:
-                log.warning(
-                    f"Unrecognized class directory: {class_dir.name}. Skipping."
-                )
+                log.warning(f"Unrecognized class directory: {class_dir.name}. Skipping.")
                 continue
             label = self.class_to_idx[class_name]
             found_classes.add(class_name)
@@ -80,8 +78,7 @@ class SpectrogramDataset(Dataset):
 
         if not self.samples:
             raise RuntimeError(
-                f"No samples found in {self.root_dir}. "
-                "Run make_spectrograms.py first."
+                f"No samples found in {self.root_dir}. " "Run make_spectrograms.py first."
             )
 
         log.info(
@@ -161,12 +158,8 @@ def get_dataloaders(
     if use_weighted_sampler:
         counts = train_dataset.class_counts
         total = len(train_dataset)
-        weights_per_class = {
-            cls: total / (len(counts) * cnt) for cls, cnt in counts.items()
-        }
-        sample_weights = [
-            weights_per_class[label] for _, label in train_dataset.samples
-        ]
+        weights_per_class = {cls: total / (len(counts) * cnt) for cls, cnt in counts.items()}
+        sample_weights = [weights_per_class[label] for _, label in train_dataset.samples]
         train_sampler = WeightedRandomSampler(
             weights=torch.DoubleTensor(sample_weights),
             num_samples=len(train_dataset),

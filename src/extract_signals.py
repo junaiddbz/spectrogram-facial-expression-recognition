@@ -101,9 +101,7 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
             lm = results.multi_face_landmarks[0].landmark
 
             # Convert normalized [0,1] coords to pixel coords
-            pts = np.array(
-                [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
-            )
+            pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
 
             for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
                 dist = _euclidean(pts[idx_a], pts[idx_b])
@@ -116,9 +114,7 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
     # Quality check: reject if >40% frames failed
     total_frames = sum(len(v) for v in signals.values()) // NUM_SIGNALS
     if total_frames == 0 or failed_frames / max(total_frames, 1) > 0.4:
-        log.warning(
-            f"Too many failed frames ({failed_frames}) in {video_path.name}. Skipping."
-        )
+        log.warning(f"Too many failed frames ({failed_frames}) in {video_path.name}. Skipping.")
         return None
 
     # Resample each signal to fixed SIGNAL_LENGTH using linear interpolation
@@ -219,9 +215,7 @@ def process_dataset(data_dir: Path, output_dir: Path) -> None:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Extract FAU signals from video dataset."
-    )
+    parser = argparse.ArgumentParser(description="Extract FAU signals from video dataset.")
     parser.add_argument(
         "--data_dir",
         type=Path,

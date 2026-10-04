@@ -125,9 +125,7 @@ with st.sidebar:
 
 
 # ─── Main Header ──────────────────────────────────────────────────────────────
-st.markdown(
-    '<h1 class="hero-title">🎭 Spectrogram FER System</h1>', unsafe_allow_html=True
-)
+st.markdown('<h1 class="hero-title">🎭 Spectrogram FER System</h1>', unsafe_allow_html=True)
 st.markdown(
     '<p class="hero-sub">Emotion recognition via Signal Processing · '
     "MediaPipe → STFT Spectrograms → ResNet-18</p>",
@@ -145,9 +143,7 @@ if engine is None:
 
 
 # ─── Input Tabs ───────────────────────────────────────────────────────────────
-tab_upload, tab_webcam, tab_demo = st.tabs(
-    ["📁 Upload Video", "📷 Webcam", "🎬 Demo Samples"]
-)
+tab_upload, tab_webcam, tab_demo = st.tabs(["📁 Upload Video", "📷 Webcam", "🎬 Demo Samples"])
 
 result = None
 
@@ -191,9 +187,7 @@ with tab_webcam:
                     break
                 buffer.push_frame(frame)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(
-                    frame_rgb, channels="RGB", use_column_width=True
-                )
+                frame_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
                 progress.progress(
                     (i + 1) / CAPTURE_FRAMES,
                     text=f"Capturing... {i+1}/{CAPTURE_FRAMES} frames",
@@ -218,16 +212,12 @@ with tab_webcam:
                         "spectrogram_img": spectrogram_img,
                     }
             else:
-                st.warning(
-                    "Not enough frames with a detected face. Try again in better lighting."
-                )
+                st.warning("Not enough frames with a detected face. Try again in better lighting.")
 
 
 # ── Tab 3: Demo Samples ────────────────────────────────────────────────────────
 with tab_demo:
-    st.info(
-        "Demo samples can be added to `app/demo_samples/` after training.", icon="📌"
-    )
+    st.info("Demo samples can be added to `app/demo_samples/` after training.", icon="📌")
 
 
 # ─── Results Panel ────────────────────────────────────────────────────────────
@@ -275,9 +265,7 @@ if result is not None:
                 paper_bgcolor="#0f172a",
                 plot_bgcolor="#1e293b",
                 font=dict(color="#cbd5e1", size=11),
-                yaxis=dict(
-                    title="Probability (%)", range=[0, 105], gridcolor="#334155"
-                ),
+                yaxis=dict(title="Probability (%)", range=[0, 105], gridcolor="#334155"),
                 xaxis=dict(tickangle=-30),
                 margin=dict(l=20, r=20, t=30, b=40),
                 height=320,

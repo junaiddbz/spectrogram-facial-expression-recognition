@@ -103,16 +103,12 @@ def signals_to_spectrogram(signal_matrix: np.ndarray) -> np.ndarray:
     channels = []
     for _channel_label, signal_names_in_channel in CHANNEL_SIGNAL_MAP.items():
         # Average the STFT magnitudes of all signals in this channel group
-        stft_mags = [
-            _compute_stft_magnitude(signal_dict[n]) for n in signal_names_in_channel
-        ]
+        stft_mags = [_compute_stft_magnitude(signal_dict[n]) for n in signal_names_in_channel]
         avg_mag = np.mean(stft_mags, axis=0)  # (freq_bins, time_frames)
         channel_img = _normalize_to_uint8(avg_mag)
 
         # Resize to target image size
-        resized = cv2.resize(
-            channel_img, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_LINEAR
-        )
+        resized = cv2.resize(channel_img, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_LINEAR)
         channels.append(resized)
 
     # Stack into RGB image (H, W, 3)
@@ -219,9 +215,7 @@ def visualize_pipeline(
     ax_rgb = fig.add_subplot(gs[2, n_signals // 2 - 1 : n_signals // 2 + 2])
     composite = signals_to_spectrogram(signal_matrix)
     ax_rgb.imshow(composite)
-    ax_rgb.set_title(
-        "Composite RGB Spectrogram (Input to CNN)", color="white", fontsize=10
-    )
+    ax_rgb.set_title("Composite RGB Spectrogram (Input to CNN)", color="white", fontsize=10)
     ax_rgb.axis("off")
 
     return fig
