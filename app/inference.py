@@ -151,35 +151,37 @@ class FacialSignalBuffer:
         return self.baseline is not None
 
     def get_signal_matrix(self) -> np.ndarray:
-        """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer."""
+        """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
+        
+        Design rationale:
+        - The CNN was trained on CK+ clips processed by extract_signals.py, which
+          uses plain np.interp to stretch variable-length clips to SIGNAL_LENGTH.
+        - CK+ clips naturally start neutral and end at peak expression.
+        - We replicate this by prepending 15 baseline frames to the last 45 real
+          frames (1.5s of actual movement), then resampling with the EXACT same
+          np.interp call used during training. No Gaussian filter, no S-curves—
+          those were never in the training pipeline and create domain gap.
+        """
         matrix = []
         for name in SIGNAL_NAMES:
             if self.baseline is not None:
-                # 1. Grab the last 30 frames (1 second) of actual facial movement
-                recent_history = np.array(self.buffer[name][-30:], dtype=np.float32)
+                # 1. Get last 1.5 seconds of real facial movement
+                recent = np.array(self.buffer[name][-45:], dtype=np.float32)
                 
-                # 2. Prepend 10 frames of the Neutral Baseline.
-                # This ensures the CNN always sees an "Onset", fixing the static emotion bug.
-                sequence = np.concatenate(([self.baseline[name]] * 10, recent_history))
+                # 2. Prepend 15 frames of neutral baseline (simulates CK+ clip start)
+                baseline_seg = np.full(15, self.baseline[name], dtype=np.float32)
+                sequence = np.concatenate((baseline_seg, recent))
                 
-                # 3. Apply a Gaussian filter. 
-                # If the face is holding an expression, this smoothly rolls the baseline 
-                # into the expression (a perfect biological curve). 
-                # It also suppresses MediaPipe micro-jitter which corrupts the STFT.
-                from scipy.ndimage import gaussian_filter1d
-                smoothed = gaussian_filter1d(sequence, sigma=2.5)
-                
-                # 4. Time-warp (stretch) the 40-frame sequence into the 90-frame input.
-                # This perfectly replicates the extract_signals.py training logic which 
-                # uniformly stretched all CK+ video clips to 90 frames.
+                # 3. Resample using the EXACT same method as extract_signals.py
+                #    This is critical: any deviation from the training pipeline
+                #    creates spectrograms the CNN has never seen before.
                 resampled = np.interp(
-                    np.linspace(0, len(smoothed) - 1, SIGNAL_LENGTH),
-                    np.arange(len(smoothed)),
-                    smoothed,
+                    np.linspace(0, len(sequence) - 1, SIGNAL_LENGTH),
+                    np.arange(len(sequence)),
+                    sequence,
                 )
                 matrix.append(resampled)
             else:
-                # Fallback if somehow called before baseline
                 raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
                 if len(raw) == 0:
                     raw = np.zeros(SIGNAL_LENGTH, dtype=np.float32)
@@ -209,9 +211,10 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     last_pred = ("Buffering...", 0.0)
     frame_count = 0
     
-    # Temporal smoothing to prevent jittery predictions
+    # Temporal smoothing: average last 3 predictions (~0.3s) to prevent jitter
+    # without adding significant lag. Previous value of 7 created ~1.7s of hidden delay.
     proba_history = []  
-    SMOOTHING_WINDOW = 7  # Average last 7 predictions (~0.7 seconds of video)
+    SMOOTHING_WINDOW = 3
 
     while True:
         ret, frame = cap.read()
