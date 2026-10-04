@@ -91,6 +91,7 @@ class FacialSignalBuffer:
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
         self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
+        self.baseline = None  # To store the neutral baseline from the first frames
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -137,6 +138,11 @@ class FacialSignalBuffer:
             self.buffer[name].append(val)
             if len(self.buffer[name]) > self.window_size:
                 self.buffer[name].pop(0)
+                
+        # 4. Set neutral baseline using the first 15 frames to anchor inference
+        if self.baseline is None and len(self.buffer[SIGNAL_NAMES[0]]) == 15:
+            self.baseline = {n: np.mean(self.buffer[n][:15]) for n in SIGNAL_NAMES}
+            
         return True
 
     def is_ready(self) -> bool:
@@ -148,6 +154,19 @@ class FacialSignalBuffer:
         matrix = []
         for name in SIGNAL_NAMES:
             raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
+            
+            # Inject neutral baseline at the start of the window.
+            # The CNN was trained on CK+ clips that ALWAYS start from a neutral face and transition to an emotion.
+            # By forcing the first 25 frames of our sliding window to be the baseline neutral face,
+            # we ensure that held/static emotions generate strong "transition" STFT frequencies 
+            # (Neutral -> Current state) rather than appearing as flat lines (which the CNN misinterprets as Sad).
+            if self.baseline is not None and len(raw) == self.window_size:
+                base = self.baseline[name]
+                raw[:25] = base
+                # Linear ramp to blend the neutral baseline into the current signal's recent history
+                ramp = np.linspace(base, raw[35], 10)
+                raw[25:35] = ramp
+                
             resampled = np.interp(
                 np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
                 np.arange(len(raw)),
