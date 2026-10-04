@@ -1,0 +1,14 @@
+# Install with: pip install -r requirements-dev.txt
+-r requirements.txt
+
+# ─── Dev & Testing ────────────────────────────────────────────────────────────
+pytest==8.0.2
+pytest-cov==4.1.0
+black==24.2.0
+flake8==7.0.0
+isort==5.13.2
+
+# ─── Notebooks ────────────────────────────────────────────────────────────────
+jupyter==1.0.0
+ipykernel==6.29.2
+ipywidgets==8.1.2
