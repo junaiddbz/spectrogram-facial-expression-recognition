@@ -172,6 +172,10 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     frame_predictions = []
     last_pred = ("Buffering...", 0.0)
     frame_count = 0
+    
+    # Temporal smoothing to prevent jittery predictions
+    proba_history = []  
+    SMOOTHING_WINDOW = 7  # Average last 7 predictions (~0.7 seconds of video)
 
     while True:
         ret, frame = cap.read()
@@ -185,8 +189,14 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
             signal_matrix = buffer.get_signal_matrix()
             spectrogram_img = signals_to_spectrogram(signal_matrix)
             proba = engine.predict(spectrogram_img)
-            pred_idx = int(np.argmax(proba))
-            last_pred = (CLASS_NAMES[pred_idx], float(np.max(proba)) * 100)
+            
+            proba_history.append(proba)
+            if len(proba_history) > SMOOTHING_WINDOW:
+                proba_history.pop(0)
+                
+            smoothed_proba = np.mean(proba_history, axis=0)
+            pred_idx = int(np.argmax(smoothed_proba))
+            last_pred = (CLASS_NAMES[pred_idx], float(np.max(smoothed_proba)) * 100)
             
         frame_predictions.append(last_pred)
         frame_count += 1
