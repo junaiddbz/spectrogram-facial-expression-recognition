@@ -155,28 +155,29 @@ class FacialSignalBuffer:
         matrix = []
         for name in SIGNAL_NAMES:
             if self.baseline is not None:
-                # We use ONLY the last 30 frames (1 second) of actual facial history.
-                # This guarantees that old emotions don't linger in the 3-second window
-                # and cause a massive prediction lag.
-                actual_history = np.array(self.buffer[name][-30:], dtype=np.float32)
-                hist_len = len(actual_history)
+                # 1. Grab the last 30 frames (1 second) of actual facial movement
+                recent_history = np.array(self.buffer[name][-30:], dtype=np.float32)
                 
-                # Fill the window with the Neutral baseline
-                base = self.baseline[name]
-                raw = np.full(SIGNAL_LENGTH, base, dtype=np.float32)
+                # 2. Prepend 10 frames of the Neutral Baseline.
+                # This ensures the CNN always sees an "Onset", fixing the static emotion bug.
+                sequence = np.concatenate(([self.baseline[name]] * 10, recent_history))
                 
-                if hist_len > 0:
-                    # Place actual recent history at the very end of the 90-frame window
-                    raw[-hist_len:] = actual_history
-                    
-                    # Create a smooth 10-frame transition from Neutral to the start of this history
-                    ramp_start = SIGNAL_LENGTH - hist_len - 10
-                    if ramp_start >= 0:
-                        ramp = np.linspace(base, actual_history[0], 10)
-                        raw[ramp_start : ramp_start + 10] = ramp
+                # 3. Apply a Gaussian filter. 
+                # If the face is holding an expression, this smoothly rolls the baseline 
+                # into the expression (a perfect biological curve). 
+                # It also suppresses MediaPipe micro-jitter which corrupts the STFT.
+                from scipy.ndimage import gaussian_filter1d
+                smoothed = gaussian_filter1d(sequence, sigma=2.5)
                 
-                # No resampling needed since `raw` is exactly perfectly crafted to SIGNAL_LENGTH
-                matrix.append(raw)
+                # 4. Time-warp (stretch) the 40-frame sequence into the 90-frame input.
+                # This perfectly replicates the extract_signals.py training logic which 
+                # uniformly stretched all CK+ video clips to 90 frames.
+                resampled = np.interp(
+                    np.linspace(0, len(smoothed) - 1, SIGNAL_LENGTH),
+                    np.arange(len(smoothed)),
+                    smoothed,
+                )
+                matrix.append(resampled)
             else:
                 # Fallback if somehow called before baseline
                 raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
