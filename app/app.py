@@ -266,7 +266,11 @@ with tab_webcam:
     run_webcam = st.button("Start Webcam Capture (3 seconds)", type="primary")
 
     if run_webcam:
+        # Try default backend first, then DirectShow for Windows
         cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            
         if not cap.isOpened():
             st.error("Could not open webcam.")
         else:
@@ -370,6 +374,10 @@ if result is not None:
     else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown('<p class="section-label">Analysis Results</p>', unsafe_allow_html=True)
+
+        if "annotated_video_path" in result:
+            st.video(result["annotated_video_path"])
+            st.markdown("<br>", unsafe_allow_html=True)
 
         col_pred, col_spec, col_signals = st.columns([1, 1.3, 1.7])
 

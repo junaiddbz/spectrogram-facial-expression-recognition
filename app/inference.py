@@ -5,12 +5,14 @@ Standalone inference engine for the Streamlit app.
 
 Handles the full pipeline:
   Video/Webcam Frame → MediaPipe Landmarks → FAU Signals → STFT Spectrogram → CNN → Emotion
+  Also tracks facial bounding boxes to render an annotated output video.
 
 Uses ONNX Runtime for CPU-only inference (no PyTorch required at runtime).
 Uses MediaPipe Face Mesh via the legacy mp.solutions API (mediapipe < 0.10.14).
 """
 
 import sys
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -74,7 +76,7 @@ class ONNXInferenceEngine:
 class FacialSignalBuffer:
     """
     Maintains a rolling buffer of FAU distance signals from video frames.
-    Used for real-time webcam inference.
+    Also stores facial bounding boxes for rendering output video.
     """
 
     def __init__(self, window_size: int = SIGNAL_LENGTH) -> None:
@@ -88,6 +90,7 @@ class FacialSignalBuffer:
             min_tracking_confidence=0.5,
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
+        self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -101,19 +104,33 @@ class FacialSignalBuffer:
         results = self.face_mesh.process(rgb)
 
         if not results.multi_face_landmarks:
+            # Face lost: repeat last values to keep time-series intact
             for name in SIGNAL_NAMES:
                 val = self.last_values[name]
                 self.buffer[name].append(val)
                 if len(self.buffer[name]) > self.window_size:
                     self.buffer[name].pop(0)
+            self.bboxes.append(None)
             return False
 
         lm = results.multi_face_landmarks[0].landmark
+        
+        # 1. Calculate face bounding box
+        xs = [int(p.x * w) for p in lm]
+        ys = [int(p.y * h) for p in lm]
+        # Add a slight padding to the bounding box
+        pad_w, pad_h = int(w * 0.02), int(h * 0.02)
+        x1, x2 = max(0, min(xs) - pad_w), min(w, max(xs) + pad_w)
+        y1, y2 = max(0, min(ys) - pad_h), min(h, max(ys) + pad_h)
+        self.bboxes.append((x1, y1, x2, y2))
+
+        # 2. Extract 3D points
         pts = np.array(
             [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
         )
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
+        # 3. Compute FAUs
         for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
             val = self._euclidean(pts[idx_a], pts[idx_b]) / inter_ocular
             self.last_values[name] = val
@@ -147,6 +164,7 @@ class FacialSignalBuffer:
 def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     """
     Run the full pipeline on an uploaded video file.
+    Also generates an annotated video output with face bounding boxes.
     """
     buffer = FacialSignalBuffer()
     cap = cv2.VideoCapture(video_path)
@@ -166,15 +184,68 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
             "Ensure the face is clearly visible."
         }
 
+    # 1. Run inference
     signal_matrix = buffer.get_signal_matrix()
     spectrogram_img = signals_to_spectrogram(signal_matrix)
     proba = engine.predict(spectrogram_img)
     pred_idx = int(np.argmax(proba))
     pred_class = CLASS_NAMES[pred_idx]
+    confidence = float(np.max(proba)) * 100
+
+    # 2. Render Annotated Output Video
+    out_path = tempfile.NamedTemporaryFile(suffix=".webm", delete=False).name
+    cap = cv2.VideoCapture(video_path)
+    
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps == 0 or np.isnan(fps):
+        fps = 30.0
+    
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # VP80 codec in webm format works exceptionally well across all browsers
+    fourcc = cv2.VideoWriter_fourcc(*'VP80')
+    out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+    
+    frame_idx = 0
+    # BGR color for the bounding box (indigo accent)
+    box_color = (241, 102, 99) 
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        if frame_idx < len(buffer.bboxes) and buffer.bboxes[frame_idx] is not None:
+            x1, y1, x2, y2 = buffer.bboxes[frame_idx]
+            
+            # Draw Face Box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+            
+            # Draw Emotion Text Background
+            text = f"{pred_class} {confidence:.1f}%"
+            font = cv2.FONT_HERSHEY_DUPLEX
+            font_scale = 0.6
+            thickness = 1
+            (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+            
+            # Ensure text background doesn't clip top of frame
+            bg_y1 = max(0, y1 - th - 10)
+            cv2.rectangle(frame, (x1, bg_y1), (x1 + tw + 10, bg_y1 + th + 10), box_color, -1)
+            
+            # Draw Text
+            cv2.putText(frame, text, (x1 + 5, bg_y1 + th + 5), font, font_scale, (255, 255, 255), thickness)
+            
+        out.write(frame)
+        frame_idx += 1
+
+    cap.release()
+    out.release()
 
     return {
         "proba": proba,
         "predicted_class": pred_class,
         "signal_matrix": signal_matrix,
         "spectrogram_img": spectrogram_img,
+        "annotated_video_path": out_path,
     }
