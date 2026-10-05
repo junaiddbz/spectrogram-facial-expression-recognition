@@ -108,12 +108,16 @@ class FacialSignalBuffer:
         results = self.face_mesh.process(rgb)
 
         if not results.multi_face_landmarks:
-            # Face lost: repeat last values to keep time-series intact
-            for name in SIGNAL_NAMES:
-                val = self.last_values[name]
-                self.buffer[name].append(val)
-                if len(self.buffer[name]) > self.max_buffer:
-                    self.buffer[name].pop(0)
+            # Face lost or not yet detected.
+            # CRITICAL FIX: Only append values if we have already detected a face at least once.
+            # Appending 0.0 before a face is detected creates a massive mathematical impulse (0.0 -> 1.9)
+            # which completely destroys the STFT frequency spectrum.
+            if len(self.buffer[SIGNAL_NAMES[0]]) > 0:
+                for name in SIGNAL_NAMES:
+                    val = self.last_values[name]
+                    self.buffer[name].append(val)
+                    if len(self.buffer[name]) > self.max_buffer:
+                        self.buffer[name].pop(0)
             self.bboxes.append(None)
             return False
 
