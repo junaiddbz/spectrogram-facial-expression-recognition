@@ -80,7 +80,11 @@ class FacialSignalBuffer:
     """
 
     def __init__(self, window_size: int = SIGNAL_LENGTH) -> None:
+        # Keep a LONGER buffer than SIGNAL_LENGTH so we always have enough
+        # natural variation. We use 150 frames (5 seconds) as the max buffer,
+        # but only the most recent N frames are used for prediction.
         self.window_size = window_size
+        self.max_buffer = 150  # 5 seconds at 30fps
         self.buffer = {name: [] for name in SIGNAL_NAMES}
         self.face_mesh = mp_face_mesh.FaceMesh(
             static_image_mode=False,
@@ -91,7 +95,6 @@ class FacialSignalBuffer:
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
         self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
-        self.baseline = None  # To store the neutral baseline from the first frames
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -109,7 +112,7 @@ class FacialSignalBuffer:
             for name in SIGNAL_NAMES:
                 val = self.last_values[name]
                 self.buffer[name].append(val)
-                if len(self.buffer[name]) > self.window_size:
+                if len(self.buffer[name]) > self.max_buffer:
                     self.buffer[name].pop(0)
             self.bboxes.append(None)
             return False
@@ -136,61 +139,43 @@ class FacialSignalBuffer:
             val = self._euclidean(pts[idx_a], pts[idx_b]) / inter_ocular
             self.last_values[name] = val
             self.buffer[name].append(val)
-            if len(self.buffer[name]) > self.window_size:
+            if len(self.buffer[name]) > self.max_buffer:
                 self.buffer[name].pop(0)
-                
-        # 4. Set neutral baseline using the first 15 frames to anchor inference
-        if self.baseline is None and len(self.buffer[SIGNAL_NAMES[0]]) == 15:
-            self.baseline = {n: np.mean(self.buffer[n][:15]) for n in SIGNAL_NAMES}
             
         return True
 
     def is_ready(self) -> bool:
-        # Ready as soon as we have a neutral baseline (first 15 frames / 0.5 seconds)
-        # This completely eliminates the 3-second startup "Buffering..." lag.
-        return self.baseline is not None
+        """Ready after 30 frames (1 second) of data."""
+        return len(self.buffer[SIGNAL_NAMES[0]]) >= 30
 
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
         
-        Design rationale:
-        - The CNN was trained on CK+ clips processed by extract_signals.py, which
-          uses plain np.interp to stretch variable-length clips to SIGNAL_LENGTH.
-        - CK+ clips naturally start neutral and end at peak expression.
-        - We replicate this by prepending 15 baseline frames to the last 45 real
-          frames (1.5s of actual movement), then resampling with the EXACT same
-          np.interp call used during training. No Gaussian filter, no S-curves—
-          those were never in the training pipeline and create domain gap.
+        Design rationale (informed by actual training data analysis):
+        - The CNN was trained on RAVDESS clips that contain NATURAL, continuous 
+          facial variation — NOT clean neutral-to-peak transitions.
+        - Training signals have std of 0.01-0.09 from natural micro-movements,
+          speaking, blinking etc. Even "Neutral" training clips have significant
+          variation with deltas up to 0.09.
+        - Injecting flat baselines creates step functions that produce broadband 
+          noise in the STFT — a pattern the CNN has NEVER seen during training.
+        - The correct approach: use raw temporal history and resample with the
+          EXACT same np.interp call used in extract_signals.py.
         """
         matrix = []
         for name in SIGNAL_NAMES:
-            if self.baseline is not None:
-                # 1. Get last 1.5 seconds of real facial movement
-                recent = np.array(self.buffer[name][-45:], dtype=np.float32)
-                
-                # 2. Prepend 15 frames of neutral baseline (simulates CK+ clip start)
-                baseline_seg = np.full(15, self.baseline[name], dtype=np.float32)
-                sequence = np.concatenate((baseline_seg, recent))
-                
-                # 3. Resample using the EXACT same method as extract_signals.py
-                #    This is critical: any deviation from the training pipeline
-                #    creates spectrograms the CNN has never seen before.
-                resampled = np.interp(
-                    np.linspace(0, len(sequence) - 1, SIGNAL_LENGTH),
-                    np.arange(len(sequence)),
-                    sequence,
-                )
-                matrix.append(resampled)
-            else:
-                raw = np.array(self.buffer[name][-self.window_size :], dtype=np.float32)
-                if len(raw) == 0:
-                    raw = np.zeros(SIGNAL_LENGTH, dtype=np.float32)
-                resampled = np.interp(
-                    np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
-                    np.arange(len(raw)),
-                    raw,
-                )
-                matrix.append(resampled)
+            # Use ALL available frames in the buffer (up to max_buffer).
+            # This captures the natural variation the model was trained on.
+            raw = np.array(self.buffer[name], dtype=np.float32)
+            
+            # Resample to SIGNAL_LENGTH using the EXACT same method 
+            # as extract_signals.py line 124-128.
+            resampled = np.interp(
+                np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
+                np.arange(len(raw)),
+                raw,
+            )
+            matrix.append(resampled)
                 
         return np.array(matrix, dtype=np.float32)
 
