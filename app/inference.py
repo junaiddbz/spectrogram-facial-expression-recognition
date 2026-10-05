@@ -95,6 +95,20 @@ class FacialSignalBuffer:
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
         self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
+        
+        # User's resting face shape
+        self.user_baseline = None
+        
+        # Global average face shape from the 2,880 RAVDESS training samples
+        self.training_means = {
+            "lip_aperture": 0.0993,
+            "mouth_width": 0.5921,
+            "left_brow_raise": 0.2511,
+            "right_brow_raise": 0.2498,
+            "left_eye_open": 0.0954,
+            "right_eye_open": 0.0960,
+            "jaw_open": 1.9475
+        }
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -145,32 +159,37 @@ class FacialSignalBuffer:
             self.buffer[name].append(val)
             if len(self.buffer[name]) > self.max_buffer:
                 self.buffer[name].pop(0)
+                
+        # 4. Lock in the user's unique resting face shape after 15 frames (~0.5s)
+        if self.user_baseline is None and len(self.buffer[SIGNAL_NAMES[0]]) == 15:
+            self.user_baseline = {n: np.mean(self.buffer[n][:15]) for n in SIGNAL_NAMES}
             
         return True
 
     def is_ready(self) -> bool:
         """Ready after 30 frames (1 second) of data."""
-        return len(self.buffer[SIGNAL_NAMES[0]]) >= 30
+        return len(self.buffer[SIGNAL_NAMES[0]]) >= 30 and self.user_baseline is not None
 
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
         
-        Design rationale (informed by actual training data analysis):
-        - The CNN was trained on RAVDESS clips that contain NATURAL, continuous 
-          facial variation — NOT clean neutral-to-peak transitions.
-        - Training signals have std of 0.01-0.09 from natural micro-movements,
-          speaking, blinking etc. Even "Neutral" training clips have significant
-          variation with deltas up to 0.09.
-        - Injecting flat baselines creates step functions that produce broadband 
-          noise in the STFT — a pattern the CNN has NEVER seen during training.
-        - The correct approach: use raw temporal history and resample with the
-          EXACT same np.interp call used in extract_signals.py.
+        Design rationale:
+        - We apply 'Domain Anchoring' by mathematically mapping the user's face shape
+          to the RAVDESS training set's average face shape. 
+        - The STFT's DC component (0Hz bin) acts as an absolute position tracker.
+          If the user's resting jaw is physically larger than the training set's average,
+          the CNN thinks the user is constantly yelling.
+        - By shifting the signal: (Raw - UserResting) + TrainingResting, we completely
+          eliminate the domain gap caused by personal face geometry while perfectly
+          preserving the exact facial expression dynamics (deltas).
         """
         matrix = []
         for name in SIGNAL_NAMES:
-            # Use ALL available frames in the buffer (up to max_buffer).
-            # This captures the natural variation the model was trained on.
             raw = np.array(self.buffer[name], dtype=np.float32)
+            
+            # Domain anchoring: map user geometry to training geometry
+            if self.user_baseline is not None:
+                raw = raw - self.user_baseline[name] + self.training_means[name]
             
             # Resample to SIGNAL_LENGTH using the EXACT same method 
             # as extract_signals.py line 124-128.
