@@ -38,6 +38,7 @@ from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
 mp_face_mesh = mp.solutions.face_mesh
 
+
 # ─── ONNX Inference Engine ────────────────────────────────────────────────────
 class ONNXInferenceEngine:
     """Fast CPU inference using ONNX Runtime."""
@@ -95,10 +96,10 @@ class FacialSignalBuffer:
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
         self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
-        
+
         # User's resting face shape
         self.user_baseline = None
-        
+
         # Global average face shape from the 2,880 RAVDESS training samples
         self.training_means = {
             "lip_aperture": 0.0993,
@@ -107,7 +108,7 @@ class FacialSignalBuffer:
             "right_brow_raise": 0.2498,
             "left_eye_open": 0.0954,
             "right_eye_open": 0.0960,
-            "jaw_open": 1.9475
+            "jaw_open": 1.9475,
         }
 
     def _euclidean(self, p1, p2) -> float:
@@ -136,7 +137,7 @@ class FacialSignalBuffer:
             return False
 
         lm = results.multi_face_landmarks[0].landmark
-        
+
         # 1. Calculate face bounding box
         xs = [int(p.x * w) for p in lm]
         ys = [int(p.y * h) for p in lm]
@@ -147,9 +148,7 @@ class FacialSignalBuffer:
         self.bboxes.append((x1, y1, x2, y2))
 
         # 2. Extract 3D points
-        pts = np.array(
-            [[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm]
-        )
+        pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
         # 3. Compute FAUs
@@ -159,11 +158,11 @@ class FacialSignalBuffer:
             self.buffer[name].append(val)
             if len(self.buffer[name]) > self.max_buffer:
                 self.buffer[name].pop(0)
-                
+
         # 4. Lock in the user's unique resting face shape after 15 frames (~0.5s)
         if self.user_baseline is None and len(self.buffer[SIGNAL_NAMES[0]]) == 15:
             self.user_baseline = {n: np.mean(self.buffer[n][:15]) for n in SIGNAL_NAMES}
-            
+
         return True
 
     def is_ready(self) -> bool:
@@ -172,10 +171,10 @@ class FacialSignalBuffer:
 
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
-        
+
         Design rationale:
         - We apply 'Domain Anchoring' by mathematically mapping the user's face shape
-          to the RAVDESS training set's average face shape. 
+          to the RAVDESS training set's average face shape.
         - The STFT's DC component (0Hz bin) acts as an absolute position tracker.
           If the user's resting jaw is physically larger than the training set's average,
           the CNN thinks the user is constantly yelling.
@@ -186,12 +185,12 @@ class FacialSignalBuffer:
         matrix = []
         for name in SIGNAL_NAMES:
             raw = np.array(self.buffer[name], dtype=np.float32)
-            
+
             # Domain anchoring: map user geometry to training geometry
             if self.user_baseline is not None:
                 raw = raw - self.user_baseline[name] + self.training_means[name]
-            
-            # Resample to SIGNAL_LENGTH using the EXACT same method 
+
+            # Resample to SIGNAL_LENGTH using the EXACT same method
             # as extract_signals.py line 124-128.
             resampled = np.interp(
                 np.linspace(0, len(raw) - 1, SIGNAL_LENGTH),
@@ -199,7 +198,7 @@ class FacialSignalBuffer:
                 raw,
             )
             matrix.append(resampled)
-                
+
         return np.array(matrix, dtype=np.float32)
 
     def close(self) -> None:
@@ -218,33 +217,33 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     frame_predictions = []
     last_pred = ("Buffering...", 0.0)
     frame_count = 0
-    
+
     # Temporal smoothing: average last 3 predictions (~0.3s) to prevent jitter
     # without adding significant lag. Previous value of 7 created ~1.7s of hidden delay.
-    proba_history = []  
+    proba_history = []
     SMOOTHING_WINDOW = 3
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-            
+
         buffer.push_frame(frame)
-        
+
         # Sliding window dynamic prediction: predict every 3 frames to optimize speed
         if buffer.is_ready() and frame_count % 3 == 0:
             signal_matrix = buffer.get_signal_matrix()
             spectrogram_img = signals_to_spectrogram(signal_matrix)
             proba = engine.predict(spectrogram_img)
-            
+
             proba_history.append(proba)
             if len(proba_history) > SMOOTHING_WINDOW:
                 proba_history.pop(0)
-                
+
             smoothed_proba = np.mean(proba_history, axis=0)
             pred_idx = int(np.argmax(smoothed_proba))
             last_pred = (CLASS_NAMES[pred_idx], float(np.max(smoothed_proba)) * 100)
-            
+
         frame_predictions.append(last_pred)
         frame_count += 1
 
@@ -267,50 +266,52 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
     # 2. Render Annotated Output Video with dynamic labels
     out_path = tempfile.NamedTemporaryFile(suffix=".webm", delete=False).name
     cap = cv2.VideoCapture(video_path)
-    
+
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps == 0 or np.isnan(fps):
         fps = 30.0
-    
+
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
-    fourcc = cv2.VideoWriter_fourcc(*'VP80')
+
+    fourcc = cv2.VideoWriter_fourcc(*"VP80")
     out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
-    
+
     frame_idx = 0
-    box_color = (241, 102, 99) 
-    
+    box_color = (241, 102, 99)
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-            
+
         if frame_idx < len(buffer.bboxes) and buffer.bboxes[frame_idx] is not None:
             x1, y1, x2, y2 = buffer.bboxes[frame_idx]
-            
+
             # Get the dynamic prediction for THIS exact frame
             dyn_class, dyn_conf = frame_predictions[frame_idx]
-            
+
             # Draw Face Box
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-            
+
             # Draw Emotion Text Background
             if dyn_class == "Buffering...":
                 text = dyn_class
             else:
                 text = f"{dyn_class} {dyn_conf:.1f}%"
-                
+
             font = cv2.FONT_HERSHEY_DUPLEX
             font_scale = 0.6
             thickness = 1
             (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
-            
+
             bg_y1 = max(0, y1 - th - 10)
             cv2.rectangle(frame, (x1, bg_y1), (x1 + tw + 10, bg_y1 + th + 10), box_color, -1)
-            
-            cv2.putText(frame, text, (x1 + 5, bg_y1 + th + 5), font, font_scale, (255, 255, 255), thickness)
-            
+
+            cv2.putText(
+                frame, text, (x1 + 5, bg_y1 + th + 5), font, font_scale, (255, 255, 255), thickness
+            )
+
         out.write(frame)
         frame_idx += 1
 

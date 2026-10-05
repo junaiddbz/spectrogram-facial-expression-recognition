@@ -270,7 +270,7 @@ with tab_webcam:
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            
+
         if not cap.isOpened():
             st.error("Could not open webcam.")
         else:
@@ -310,8 +310,7 @@ with tab_webcam:
                     }
             else:
                 st.warning(
-                    "Not enough frames with a detected face. "
-                    "Try again in better lighting."
+                    "Not enough frames with a detected face. " "Try again in better lighting."
                 )
 
 
@@ -326,8 +325,7 @@ DEMO_META = {
 with tab_demo:
     if not DEMO_DIR.exists() or not list(DEMO_DIR.glob("*.npy")):
         st.warning(
-            "Demo samples not found. "
-            "Run `python app/generate_demo_samples.py` to generate them."
+            "Demo samples not found. " "Run `python app/generate_demo_samples.py` to generate them."
         )
     else:
         st.markdown(

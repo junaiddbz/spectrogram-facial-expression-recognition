@@ -34,25 +34,57 @@ DEMOS = {
         # left/right_brow_raise: slightly raised
         # left/right_eye_open: normal
         # jaw_open: moderate
-        0: smooth(np.clip(0.35 + 0.25 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.1, 0.9)),
-        1: smooth(np.clip(0.55 + 0.1 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.015, SIGNAL_LENGTH), 0.3, 0.9)),
+        0: smooth(
+            np.clip(
+                0.35 + 0.25 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH),
+                0.1,
+                0.9,
+            )
+        ),
+        1: smooth(
+            np.clip(
+                0.55 + 0.1 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.015, SIGNAL_LENGTH),
+                0.3,
+                0.9,
+            )
+        ),
         2: smooth(make_baseline() + 0.08),
         3: smooth(make_baseline() + 0.08),
         4: smooth(make_baseline()),
         5: smooth(make_baseline()),
-        6: smooth(np.clip(0.25 + 0.15 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.1, 0.6)),
+        6: smooth(
+            np.clip(
+                0.25 + 0.15 * np.sin(np.pi * t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH),
+                0.1,
+                0.6,
+            )
+        ),
     },
     "Surprised": {
         # jaw_open: high
         # eye_open: high
         # brow_raise: high
-        0: smooth(np.clip(0.5 + 0.3 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)),
-        1: smooth(np.clip(0.45 + 0.2 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.85)),
-        2: smooth(np.clip(0.5 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)),
-        3: smooth(np.clip(0.5 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)),
-        4: smooth(np.clip(0.4 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.9)),
-        5: smooth(np.clip(0.4 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.9)),
-        6: smooth(np.clip(0.45 + 0.35 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)),
+        0: smooth(
+            np.clip(0.5 + 0.3 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)
+        ),
+        1: smooth(
+            np.clip(0.45 + 0.2 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.85)
+        ),
+        2: smooth(
+            np.clip(0.5 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)
+        ),
+        3: smooth(
+            np.clip(0.5 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)
+        ),
+        4: smooth(
+            np.clip(0.4 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.9)
+        ),
+        5: smooth(
+            np.clip(0.4 + 0.25 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.9)
+        ),
+        6: smooth(
+            np.clip(0.45 + 0.35 * (t / 3) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.2, 0.95)
+        ),
     },
     "Neutral": {
         0: smooth(make_baseline()),
@@ -66,8 +98,20 @@ DEMOS = {
     "Angry": {
         # brow_raise: low (furrowed), lip_aperture: tense slight open
         # eye_open: narrowed slightly
-        0: smooth(np.clip(0.15 + 0.1 * np.abs(np.sin(2 * np.pi * t)) + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.05, 0.5)),
-        1: smooth(np.clip(0.3 + 0.05 * np.sin(np.pi * t) + np.random.normal(0, 0.015, SIGNAL_LENGTH), 0.1, 0.5)),
+        0: smooth(
+            np.clip(
+                0.15
+                + 0.1 * np.abs(np.sin(2 * np.pi * t))
+                + np.random.normal(0, 0.02, SIGNAL_LENGTH),
+                0.05,
+                0.5,
+            )
+        ),
+        1: smooth(
+            np.clip(
+                0.3 + 0.05 * np.sin(np.pi * t) + np.random.normal(0, 0.015, SIGNAL_LENGTH), 0.1, 0.5
+            )
+        ),
         2: smooth(np.clip(0.15 + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.05, 0.35)),
         3: smooth(np.clip(0.15 + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.05, 0.35)),
         4: smooth(np.clip(0.2 + np.random.normal(0, 0.02, SIGNAL_LENGTH), 0.1, 0.4)),
