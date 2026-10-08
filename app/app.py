@@ -12,16 +12,16 @@ Features:
   - Pre-loaded demo samples
 """
 
+import base64
 import sys
 import tempfile
-import base64
 from io import BytesIO
 from pathlib import Path
-from PIL import Image
 
 import cv2
 import numpy as np
 import streamlit as st
+from PIL import Image
 
 
 def array_to_base64(img_array):
@@ -36,11 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = Path(__file__).resolve().parent
 sys.path.extend([str(ROOT / "src"), str(APP_DIR)])
 
-from inference import (  # noqa: E402
-    FacialSignalBuffer,
-    ONNXInferenceEngine,
-    predict_from_video,
-)
+from inference import FacialSignalBuffer, ONNXInferenceEngine, predict_from_video  # noqa: E402
+
 from config import CLASS_NAMES, ONNX_MODEL_PATH  # noqa: E402
 from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
