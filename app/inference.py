@@ -109,7 +109,7 @@ class FacialSignalBuffer:
         if not results.multi_face_landmarks:
             # Face lost or not yet detected.
             # CRITICAL FIX: Only append values if we have already detected a face at least once.
-            # Appending 0.0 before a face is detected creates a massive mathematical impulse (0.0 -> 1.9)
+            # Appending 0.0 before a face is detected creates a massive mathematical impulse (0.0 -> 1.9)  # noqa: E501
             # which completely destroys the STFT frequency spectrum.
             if len(self.buffer[SIGNAL_NAMES[0]]) > 0:
                 for name in SIGNAL_NAMES:

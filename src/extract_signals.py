@@ -93,7 +93,7 @@ def extract_signals_from_video(video_path: Path) -> np.ndarray | None:
 
             if not results.multi_face_landmarks:
                 # Face not detected — propagate last value.
-                # If no face has been detected yet, do not append 0.0 (prevents STFT impulse distortion)
+                # If no face has been detected yet, do not append 0.0 (prevents STFT impulse distortion)  # noqa: E501
                 failed_frames += 1
                 if signals[SIGNAL_NAMES[0]]:
                     for name in SIGNAL_NAMES:

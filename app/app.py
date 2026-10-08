@@ -56,14 +56,14 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');  # noqa: E501
 
   html, body, [class*="css"] {
     font-family: 'Outfit', sans-serif;
   }
 
   /* ── Background ── */
-  .stApp { 
+  .stApp {
       background: radial-gradient(circle at top, #1e1b4b, #020617);
   }
   section[data-testid="stSidebar"] {
@@ -230,7 +230,7 @@ with st.sidebar:
     st.markdown(
         '<p style="font-size:1.05rem;font-weight:700;color:#e2e8f0;margin-bottom:0.1rem;">'
         "Spectrogram FER</p>"
-        '<p style="font-size:0.75rem;color:#475569;margin-top:0;">Facial Expression Recognition</p>',
+        '<p style="font-size:0.75rem;color:#475569;margin-top:0;">Facial Expression Recognition</p>',  # noqa: E501
         unsafe_allow_html=True,
     )
     st.divider()
@@ -246,7 +246,7 @@ with st.sidebar:
     ]
     for title, desc in steps:
         st.markdown(
-            f'<div class="pipeline-step">{title}<br><span style="color:#64748b">{desc}</span></div>',
+            f'<div class="pipeline-step">{title}<br><span style="color:#64748b">{desc}</span></div>',  # noqa: E501
             unsafe_allow_html=True,
         )
 
@@ -270,7 +270,7 @@ st.markdown(
     """
 <div class="hero-container">
     <div class="hero-title">Spectrogram FER System</div>
-    <div class="hero-sub">Emotion recognition via Signal Processing &nbsp;·&nbsp; MediaPipe &rarr; STFT Spectrograms &rarr; ResNet-18</div>
+    <div class="hero-sub">Emotion recognition via Signal Processing &nbsp;·&nbsp; MediaPipe &rarr; STFT Spectrograms &rarr; ResNet-18</div>  # noqa: E501
 </div>
 """,
     unsafe_allow_html=True,
@@ -422,7 +422,7 @@ if result is not None:
     elif isinstance(result, list):
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown(
-            '<p class="section-label" style="text-align:center; color:#94a3b8;">Temporal Analysis Report</p>',
+            '<p class="section-label" style="text-align:center; color:#94a3b8;">Temporal Analysis Report</p>',  # noqa: E501
             unsafe_allow_html=True,
         )
 
@@ -451,12 +451,12 @@ if result is not None:
                         st.markdown(
                             f"""
                         <div class="result-card">
-                            <div class="rc-image" style="background-image: url('data:image/jpeg;base64,{img_b64}')"></div>
+                            <div class="rc-image" style="background-image: url('data:image/jpeg;base64,{img_b64}')"></div>  # noqa: E501
                             <div class="rc-content">
                                 <div class="rc-timestamp">⏱ {item['timestamp']}</div>
                                 <h3 class="rc-emotion" style="color: {color};">{emotion}</h3>
                                 <div class="rc-confidence">
-                                    <div class="rc-conf-fill" style="width: {item['confidence']}%; background: {color};"></div>
+                                    <div class="rc-conf-fill" style="width: {item['confidence']}%; background: {color};"></div>  # noqa: E501
                                 </div>
                                 <div class="rc-conf-text">{item['confidence']:.1f}% Confidence</div>
                             </div>
