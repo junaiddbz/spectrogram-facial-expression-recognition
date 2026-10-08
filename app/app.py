@@ -23,11 +23,13 @@ import cv2
 import numpy as np
 import streamlit as st
 
+
 def array_to_base64(img_array):
     img = Image.fromarray(img_array)
     buffered = BytesIO()
     img.save(buffered, format="JPEG", quality=85)
     return base64.b64encode(buffered.getvalue()).decode()
+
 
 # ─── Path setup ───────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
@@ -251,7 +253,6 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-
     st.divider()
     st.markdown('<p class="section-label">About</p>', unsafe_allow_html=True)
     st.markdown(
@@ -268,12 +269,15 @@ with st.sidebar:
 
 
 # ─── Main Header ──────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <div class="hero-container">
     <div class="hero-title">Spectrogram FER System</div>
     <div class="hero-sub">Emotion recognition via Signal Processing &nbsp;·&nbsp; MediaPipe &rarr; STFT Spectrograms &rarr; ResNet-18</div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 engine = load_engine()
 if engine is None:
@@ -352,15 +356,21 @@ with tab_webcam:
                     proba = engine.predict(spectrogram_img)
                     pred_idx = int(np.argmax(proba))
                     pred_class = CLASS_NAMES[pred_idx]
-                    
-                    rgb_img = cv2.cvtColor(frames_bgr[45], cv2.COLOR_BGR2RGB) if len(frames_bgr) > 45 else frame_rgb
-                    
-                    result = [{
-                        "timestamp": "Live Capture",
-                        "image": rgb_img,
-                        "emotion": pred_class,
-                        "confidence": float(np.max(proba)) * 100
-                    }]
+
+                    rgb_img = (
+                        cv2.cvtColor(frames_bgr[45], cv2.COLOR_BGR2RGB)
+                        if len(frames_bgr) > 45
+                        else frame_rgb
+                    )
+
+                    result = [
+                        {
+                            "timestamp": "Live Capture",
+                            "image": rgb_img,
+                            "emotion": pred_class,
+                            "confidence": float(np.max(proba)) * 100,
+                        }
+                    ]
             else:
                 st.warning(
                     "Not enough frames with a detected face. " "Try again in better lighting."
@@ -377,14 +387,16 @@ with tab_demo:
             '<p class="section-label">Select a demo video to run inference</p>',
             unsafe_allow_html=True,
         )
-        
+
         # Group by emotion
-        emotions = sorted(list(set([p.stem.split('_')[0].capitalize() for p in demo_videos])))
+        emotions = sorted(list(set([p.stem.split("_")[0].capitalize() for p in demo_videos])))
         selected_emotion = st.selectbox("Select Emotion Category", emotions)
-        
+
         # Get videos for selected emotion
-        filtered_videos = [p for p in demo_videos if p.stem.split('_')[0].capitalize() == selected_emotion]
-        
+        filtered_videos = [
+            p for p in demo_videos if p.stem.split("_")[0].capitalize() == selected_emotion
+        ]
+
         if not filtered_videos:
             st.info("No videos found for this emotion.")
         else:
@@ -394,9 +406,13 @@ with tab_demo:
                 with col:
                     st.video(str(vid_path))
                     st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-                    if st.button(f"Run {vid_path.stem}", key=f"demo_{vid_path.stem}", use_container_width=True):
+                    if st.button(
+                        f"Run {vid_path.stem}",
+                        key=f"demo_{vid_path.stem}",
+                        use_container_width=True,
+                    ):
                         selected_demo_video = str(vid_path)
-                        
+
             if selected_demo_video is not None:
                 with st.spinner(f"Running inference on {Path(selected_demo_video).name}..."):
                     result = predict_from_video(selected_demo_video, engine)
@@ -408,8 +424,11 @@ if result is not None:
         st.error(result["error"])
     elif isinstance(result, list):
         st.markdown("<br><hr>", unsafe_allow_html=True)
-        st.markdown('<p class="section-label" style="text-align:center; color:#94a3b8;">Temporal Analysis Report</p>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<p class="section-label" style="text-align:center; color:#94a3b8;">Temporal Analysis Report</p>',
+            unsafe_allow_html=True,
+        )
+
         # Display nicely in a grid
         cols_per_row = 5
         for i in range(0, len(result), cols_per_row):
@@ -419,12 +438,21 @@ if result is not None:
                     item = result[i + j]
                     with col:
                         # Vibrant colors for dark mode glass cards
-                        emotion = item['emotion']
-                        color = "#34d399" if emotion in ["Happy", "Surprise"] else "#fb7185" if emotion in ["Angry", "Disgust", "Fear"] else "#60a5fa" if emotion == "Sad" else "#a78bfa"
-                        
+                        emotion = item["emotion"]
+                        color = (
+                            "#34d399"
+                            if emotion in ["Happy", "Surprise"]
+                            else (
+                                "#fb7185"
+                                if emotion in ["Angry", "Disgust", "Fear"]
+                                else "#60a5fa" if emotion == "Sad" else "#a78bfa"
+                            )
+                        )
+
                         img_b64 = array_to_base64(item["image"])
-                        
-                        st.markdown(f"""
+
+                        st.markdown(
+                            f"""
                         <div class="result-card">
                             <div class="rc-image" style="background-image: url('data:image/jpeg;base64,{img_b64}')"></div>
                             <div class="rc-content">
@@ -436,4 +464,6 @@ if result is not None:
                                 <div class="rc-conf-text">{item['confidence']:.1f}% Confidence</div>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        """,
+                            unsafe_allow_html=True,
+                        )

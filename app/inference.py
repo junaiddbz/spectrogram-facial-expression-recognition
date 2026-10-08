@@ -95,8 +95,6 @@ class FacialSignalBuffer:
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
 
-
-
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
 
@@ -142,12 +140,11 @@ class FacialSignalBuffer:
         return len(self.buffer[SIGNAL_NAMES[0]]) >= self.window_size
 
     def get_signal_matrix(self) -> np.ndarray:
-        """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
-        """
+        """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer."""
         matrix = []
         for name in SIGNAL_NAMES:
             raw = np.array(self.buffer[name], dtype=np.float32)
-            raw = raw[-self.window_size:]  # Use only the most recent N frames
+            raw = raw[-self.window_size :]  # Use only the most recent N frames
 
             # Resample to SIGNAL_LENGTH using the EXACT same method
             # as extract_signals.py line 124-128.
@@ -164,14 +161,16 @@ class FacialSignalBuffer:
         self.face_mesh.close()
 
 
-def predict_from_video(video_path: str, engine: ONNXInferenceEngine, num_parts: int = 30) -> list | dict:
+def predict_from_video(
+    video_path: str, engine: ONNXInferenceEngine, num_parts: int = 30
+) -> list | dict:
     """
     Run the full pipeline on an uploaded video file.
     Cuts the video into `num_parts` overlapping 3-second windows and predicts the emotion for each.
     """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    
+
     frames_bgr = []
     while True:
         ret, frame = cap.read()
@@ -189,35 +188,32 @@ def predict_from_video(video_path: str, engine: ONNXInferenceEngine, num_parts: 
 
     results = []
     buffer = FacialSignalBuffer()
-    
+
     for i, frame in enumerate(frames_bgr):
         buffer.push_frame(frame)
-        
+
         if i in target_end_frames and buffer.is_ready():
             signal_matrix = buffer.get_signal_matrix()
             spectrogram_img = signals_to_spectrogram(signal_matrix)
             proba = engine.predict(spectrogram_img)
-            
+
             pred_idx = int(np.argmax(proba))
             emotion = CLASS_NAMES[pred_idx]
             conf = float(np.max(proba)) * 100
-            
+
             start_idx = target_end_frames[i]
             mid_idx = start_idx + 45
             timestamp = f"{start_idx / fps:.1f}s - {(i + 1) / fps:.1f}s"
-            
+
             rgb_img = cv2.cvtColor(frames_bgr[mid_idx], cv2.COLOR_BGR2RGB)
-            
-            results.append({
-                "timestamp": timestamp,
-                "image": rgb_img,
-                "emotion": emotion,
-                "confidence": conf
-            })
-            
+
+            results.append(
+                {"timestamp": timestamp, "image": rgb_img, "emotion": emotion, "confidence": conf}
+            )
+
     buffer.close()
-    
+
     if not results:
         return {"error": "Could not extract facial landmarks. Ensure the face is clearly visible."}
-        
+
     return results
