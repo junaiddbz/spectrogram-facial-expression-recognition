@@ -12,7 +12,6 @@ Uses MediaPipe Face Mesh via the legacy mp.solutions API (mediapipe < 0.10.14).
 """
 
 import sys
-import tempfile
 from pathlib import Path
 
 import cv2
@@ -95,21 +94,8 @@ class FacialSignalBuffer:
             min_tracking_confidence=0.5,
         )
         self.last_values = {name: 0.0 for name in SIGNAL_NAMES}
-        self.bboxes = []  # Stores (x1, y1, x2, y2) for each processed frame
 
-        # User's resting face shape
-        self.user_baseline = None
 
-        # Global average face shape from the 2,880 RAVDESS training samples
-        self.training_means = {
-            "lip_aperture": 0.0993,
-            "mouth_width": 0.5921,
-            "left_brow_raise": 0.2511,
-            "right_brow_raise": 0.2498,
-            "left_eye_open": 0.0954,
-            "right_eye_open": 0.0960,
-            "jaw_open": 1.9475,
-        }
 
     def _euclidean(self, p1, p2) -> float:
         return float(np.linalg.norm(p1 - p2))
@@ -133,25 +119,15 @@ class FacialSignalBuffer:
                     self.buffer[name].append(val)
                     if len(self.buffer[name]) > self.max_buffer:
                         self.buffer[name].pop(0)
-            self.bboxes.append(None)
             return False
 
         lm = results.multi_face_landmarks[0].landmark
 
-        # 1. Calculate face bounding box
-        xs = [int(p.x * w) for p in lm]
-        ys = [int(p.y * h) for p in lm]
-        # Add a slight padding to the bounding box
-        pad_w, pad_h = int(w * 0.02), int(h * 0.02)
-        x1, x2 = max(0, min(xs) - pad_w), min(w, max(xs) + pad_w)
-        y1, y2 = max(0, min(ys) - pad_h), min(h, max(ys) + pad_h)
-        self.bboxes.append((x1, y1, x2, y2))
-
-        # 2. Extract 3D points
+        # 1. Extract 3D points
         pts = np.array([[lm_point.x * w, lm_point.y * h, lm_point.z * w] for lm_point in lm])
         inter_ocular = self._euclidean(pts[33], pts[263]) + 1e-6
 
-        # 3. Compute FAUs
+        # 2. Compute FAUs
         for name, (idx_a, idx_b) in LANDMARK_SIGNALS.items():
             val = self._euclidean(pts[idx_a], pts[idx_b]) / inter_ocular
             self.last_values[name] = val
@@ -159,36 +135,19 @@ class FacialSignalBuffer:
             if len(self.buffer[name]) > self.max_buffer:
                 self.buffer[name].pop(0)
 
-        # 4. Lock in the user's unique resting face shape after 15 frames (~0.5s)
-        if self.user_baseline is None and len(self.buffer[SIGNAL_NAMES[0]]) == 15:
-            self.user_baseline = {n: np.mean(self.buffer[n][:15]) for n in SIGNAL_NAMES}
-
         return True
 
     def is_ready(self) -> bool:
-        """Ready after 30 frames (1 second) of data."""
-        return len(self.buffer[SIGNAL_NAMES[0]]) >= 30 and self.user_baseline is not None
+        """Ready after window_size frames (3 seconds) of data to prevent frequency stretching."""
+        return len(self.buffer[SIGNAL_NAMES[0]]) >= self.window_size
 
     def get_signal_matrix(self) -> np.ndarray:
         """Return (NUM_SIGNALS, SIGNAL_LENGTH) signal matrix from current buffer.
-
-        Design rationale:
-        - We apply 'Domain Anchoring' by mathematically mapping the user's face shape
-          to the RAVDESS training set's average face shape.
-        - The STFT's DC component (0Hz bin) acts as an absolute position tracker.
-          If the user's resting jaw is physically larger than the training set's average,
-          the CNN thinks the user is constantly yelling.
-        - By shifting the signal: (Raw - UserResting) + TrainingResting, we completely
-          eliminate the domain gap caused by personal face geometry while perfectly
-          preserving the exact facial expression dynamics (deltas).
         """
         matrix = []
         for name in SIGNAL_NAMES:
             raw = np.array(self.buffer[name], dtype=np.float32)
-
-            # Domain anchoring: map user geometry to training geometry
-            if self.user_baseline is not None:
-                raw = raw - self.user_baseline[name] + self.training_means[name]
+            raw = raw[-self.window_size:]  # Use only the most recent N frames
 
             # Resample to SIGNAL_LENGTH using the EXACT same method
             # as extract_signals.py line 124-128.
@@ -205,123 +164,60 @@ class FacialSignalBuffer:
         self.face_mesh.close()
 
 
-# ─── Full Inference Pipeline ──────────────────────────────────────────────────
-def predict_from_video(video_path: str, engine: ONNXInferenceEngine) -> dict:
+def predict_from_video(video_path: str, engine: ONNXInferenceEngine, num_parts: int = 30) -> list | dict:
     """
     Run the full pipeline on an uploaded video file.
-    Uses a sliding window to predict changing emotions across the entire video dynamically.
+    Cuts the video into `num_parts` overlapping 3-second windows and predicts the emotion for each.
     """
-    buffer = FacialSignalBuffer()
     cap = cv2.VideoCapture(video_path)
-
-    frame_predictions = []
-    last_pred = ("Buffering...", 0.0)
-    frame_count = 0
-
-    # Temporal smoothing: average last 3 predictions (~0.3s) to prevent jitter
-    # without adding significant lag. Previous value of 7 created ~1.7s of hidden delay.
-    proba_history = []
-    SMOOTHING_WINDOW = 3
-
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    
+    frames_bgr = []
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+        frames_bgr.append(frame)
+    cap.release()
 
+    if len(frames_bgr) < 90:
+        return {"error": "Video is too short. Must be at least 3 seconds long."}
+
+    max_start = len(frames_bgr) - 90
+    start_indices = np.linspace(0, max_start, min(num_parts, max_start + 1), dtype=int)
+    target_end_frames = {start + 89: start for start in start_indices}
+
+    results = []
+    buffer = FacialSignalBuffer()
+    
+    for i, frame in enumerate(frames_bgr):
         buffer.push_frame(frame)
-
-        # Sliding window dynamic prediction: predict every 3 frames to optimize speed
-        if buffer.is_ready() and frame_count % 3 == 0:
+        
+        if i in target_end_frames and buffer.is_ready():
             signal_matrix = buffer.get_signal_matrix()
             spectrogram_img = signals_to_spectrogram(signal_matrix)
             proba = engine.predict(spectrogram_img)
-
-            proba_history.append(proba)
-            if len(proba_history) > SMOOTHING_WINDOW:
-                proba_history.pop(0)
-
-            smoothed_proba = np.mean(proba_history, axis=0)
-            pred_idx = int(np.argmax(smoothed_proba))
-            last_pred = (CLASS_NAMES[pred_idx], float(np.max(smoothed_proba)) * 100)
-
-        frame_predictions.append(last_pred)
-        frame_count += 1
-
-    cap.release()
+            
+            pred_idx = int(np.argmax(proba))
+            emotion = CLASS_NAMES[pred_idx]
+            conf = float(np.max(proba)) * 100
+            
+            start_idx = target_end_frames[i]
+            mid_idx = start_idx + 45
+            timestamp = f"{start_idx / fps:.1f}s - {(i + 1) / fps:.1f}s"
+            
+            rgb_img = cv2.cvtColor(frames_bgr[mid_idx], cv2.COLOR_BGR2RGB)
+            
+            results.append({
+                "timestamp": timestamp,
+                "image": rgb_img,
+                "emotion": emotion,
+                "confidence": conf
+            })
+            
     buffer.close()
-
-    if not buffer.is_ready():
-        return {
-            "error": "Could not extract enough facial landmarks from the video. "
-            "Ensure the face is clearly visible."
-        }
-
-    # 1. Final state for the static UI displays (last 3 seconds)
-    signal_matrix = buffer.get_signal_matrix()
-    spectrogram_img = signals_to_spectrogram(signal_matrix)
-    proba = engine.predict(spectrogram_img)
-    pred_idx = int(np.argmax(proba))
-    final_class = CLASS_NAMES[pred_idx]
-
-    # 2. Render Annotated Output Video with dynamic labels
-    out_path = tempfile.NamedTemporaryFile(suffix=".webm", delete=False).name
-    cap = cv2.VideoCapture(video_path)
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0 or np.isnan(fps):
-        fps = 30.0
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    fourcc = cv2.VideoWriter_fourcc(*"VP80")
-    out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
-
-    frame_idx = 0
-    box_color = (241, 102, 99)
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        if frame_idx < len(buffer.bboxes) and buffer.bboxes[frame_idx] is not None:
-            x1, y1, x2, y2 = buffer.bboxes[frame_idx]
-
-            # Get the dynamic prediction for THIS exact frame
-            dyn_class, dyn_conf = frame_predictions[frame_idx]
-
-            # Draw Face Box
-            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-
-            # Draw Emotion Text Background
-            if dyn_class == "Buffering...":
-                text = dyn_class
-            else:
-                text = f"{dyn_class} {dyn_conf:.1f}%"
-
-            font = cv2.FONT_HERSHEY_DUPLEX
-            font_scale = 0.6
-            thickness = 1
-            (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
-
-            bg_y1 = max(0, y1 - th - 10)
-            cv2.rectangle(frame, (x1, bg_y1), (x1 + tw + 10, bg_y1 + th + 10), box_color, -1)
-
-            cv2.putText(
-                frame, text, (x1 + 5, bg_y1 + th + 5), font, font_scale, (255, 255, 255), thickness
-            )
-
-        out.write(frame)
-        frame_idx += 1
-
-    cap.release()
-    out.release()
-
-    return {
-        "proba": proba,
-        "predicted_class": final_class,
-        "signal_matrix": signal_matrix,
-        "spectrogram_img": spectrogram_img,
-        "annotated_video_path": out_path,
-    }
+    
+    if not results:
+        return {"error": "Could not extract facial landmarks. Ensure the face is clearly visible."}
+        
+    return results

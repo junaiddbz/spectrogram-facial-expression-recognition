@@ -10,6 +10,8 @@
 
 **A novel facial expression recognition system that applies audio signal processing techniques to facial motion data, bridging computer vision and speech signal analysis.**
 
+🚀 **[Live Streamlit Demo](https://spectrogram-facial-expression-recognition-cqxwsue5cseyzmnchj7k.streamlit.app/)**
+
 [Methodology](METHODOLOGY.md) · [Results](#results) · [Getting Started](#getting-started)
 
 </div>

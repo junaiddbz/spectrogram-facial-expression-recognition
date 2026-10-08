@@ -8,19 +8,15 @@ black==24.2.0
 flake8==7.0.0
 isort==5.13.2
 
-# ─── Training & Data Processing (Not needed for Streamlit App) ────────────────
+# ─── Training & Data Processing ────────────────
 torch>=2.2.0
 torchvision>=0.17.0
-torchaudio>=2.2.0
-librosa==0.10.1
 scikit-learn==1.4.0
 matplotlib==3.8.2
 seaborn==0.13.2
 tensorboard==2.16.2
 onnx==1.15.0
-huggingface_hub==0.21.0
 tqdm==4.66.2
-PyYAML==6.0.1
 
 # ─── Notebooks ────────────────────────────────────────────────────────────────
 jupyter==1.0.0

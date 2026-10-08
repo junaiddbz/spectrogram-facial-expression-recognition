@@ -14,12 +14,20 @@ Features:
 
 import sys
 import tempfile
+import base64
+from io import BytesIO
 from pathlib import Path
+from PIL import Image
 
 import cv2
 import numpy as np
-import plotly.graph_objects as go
 import streamlit as st
+
+def array_to_base64(img_array):
+    img = Image.fromarray(img_array)
+    buffered = BytesIO()
+    img.save(buffered, format="JPEG", quality=85)
+    return base64.b64encode(buffered.getvalue()).decode()
 
 # ─── Path setup ───────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,7 +39,7 @@ from inference import (  # noqa: E402
     ONNXInferenceEngine,
     predict_from_video,
 )
-from config import CLASS_NAMES, ONNX_MODEL_PATH, SIGNAL_NAMES  # noqa: E402
+from config import CLASS_NAMES, ONNX_MODEL_PATH  # noqa: E402
 from make_spectrograms import signals_to_spectrogram  # noqa: E402
 
 GITHUB_URL = "https://github.com/junaiddbz/spectrogram-facial-expression-recognition"
@@ -49,121 +57,161 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
   html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Outfit', sans-serif;
   }
 
   /* ── Background ── */
-  .stApp { background: #0a0f1e; }
+  .stApp { 
+      background: radial-gradient(circle at top, #1e1b4b, #020617);
+  }
   section[data-testid="stSidebar"] {
-    background: #0d1526;
-    border-right: 1px solid #1a2740;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   /* ── Hero ── */
+  .hero-container {
+      text-align: center;
+      padding: 3rem 0 2.5rem;
+  }
   .hero-title {
-    font-size: 2.4rem;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    background: linear-gradient(120deg, #6366f1 0%, #38bdf8 100%);
+    font-size: 3.2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    line-height: 1.2;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 4px 12px rgba(168, 85, 247, 0.2));
+    line-height: 1.1;
   }
   .hero-sub {
-    font-size: 0.95rem;
-    color: #64748b;
+    font-size: 1.15rem;
+    color: #94a3b8;
     letter-spacing: 0.02em;
-    margin-bottom: 0;
+    font-weight: 400;
   }
 
-  /* ── Prediction card ── */
-  .pred-card {
-    background: linear-gradient(135deg, #111827 0%, #1a2234 100%);
-    border: 1px solid #1e3a5f;
-    border-radius: 16px;
-    padding: 1.6rem 1.8rem;
-    text-align: center;
-    box-shadow: 0 4px 24px rgba(99,102,241,0.08);
+  /* ── Custom Result Card ── */
+  .result-card {
+      background: rgba(30, 41, 59, 0.4);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 24px;
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
   }
-  .pred-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 0.8rem;
+  .result-card:hover {
+      transform: translateY(-6px) scale(1.02);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 20px rgba(168, 85, 247, 0.15);
   }
-  .pred-emotion {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #e2e8f0;
-    margin-bottom: 0.2rem;
+  .rc-image {
+      width: 100%;
+      padding-top: 100%; /* 1:1 Aspect Ratio */
+      background-size: cover;
+      background-position: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
-  .pred-confidence {
-    font-size: 0.85rem;
-    color: #6366f1;
-    font-weight: 500;
+  .rc-content {
+      padding: 20px;
+      text-align: center;
   }
-  .confidence-bar-bg {
-    background: #1e293b;
-    border-radius: 100px;
-    height: 6px;
-    margin: 0.8rem 0 0;
-    overflow: hidden;
+  .rc-timestamp {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
+      margin-bottom: 8px;
   }
-  .confidence-bar-fill {
-    height: 100%;
-    border-radius: 100px;
-    background: linear-gradient(90deg, #6366f1, #38bdf8);
-    transition: width 0.4s ease;
+  .rc-emotion {
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin: 0 0 14px 0;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  }
+  .rc-confidence {
+      height: 6px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 8px;
+  }
+  .rc-conf-fill {
+      height: 100%;
+      border-radius: 10px;
+      transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .rc-conf-text {
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      font-weight: 500;
   }
 
   /* ── Pipeline steps ── */
   .pipeline-step {
-    background: #111827;
-    border-left: 2px solid #6366f1;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(10px);
+    border-left: 3px solid #8b5cf6;
     border-radius: 0 8px 8px 0;
-    padding: 0.55rem 1rem;
-    margin-bottom: 0.4rem;
-    font-size: 0.82rem;
+    padding: 0.7rem 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
     color: #94a3b8;
     line-height: 1.5;
+    border-top: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
   }
-  .pipeline-step b { color: #cbd5e1; }
+  .pipeline-step b { color: #f8fafc; font-weight: 600; }
 
   /* ── Section label ── */
   .section-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
     color: #475569;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
   }
 
   /* ── Divider ── */
-  hr { border-color: #1a2740 !important; }
+  hr { border-color: rgba(255,255,255,0.05) !important; }
 
-  /* ── Demo card ── */
-  .demo-card {
-    background: #111827;
-    border: 1px solid #1e2d45;
-    border-radius: 12px;
-    padding: 1.2rem;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.2s, transform 0.2s;
+  /* ── Tabs Customization ── */
+  [data-baseweb="tab-list"] {
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 1.5rem;
   }
-  .demo-card:hover { border-color: #6366f1; transform: translateY(-2px); }
-  .demo-card .dc-emotion { font-size: 1.1rem; font-weight: 600; color: #e2e8f0; }
-  .demo-card .dc-desc { font-size: 0.78rem; color: #64748b; margin-top: 0.3rem; }
-
-  /* ── Tabs ── */
-  button[data-baseweb="tab"] { font-size: 0.85rem !important; }
+  [data-baseweb="tab"] {
+      background: transparent !important;
+      border-radius: 8px !important;
+      padding: 10px 24px !important;
+      font-size: 0.95rem !important;
+      font-weight: 600 !important;
+      color: #94a3b8 !important;
+      border: none !important;
+  }
+  [aria-selected="true"] {
+      background: rgba(255, 255, 255, 0.1) !important;
+      color: #fff !important;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+  [data-baseweb="tab-highlight"] {
+      display: none;
+  }
 </style>
 """,
     unsafe_allow_html=True,
@@ -203,6 +251,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
+
     st.divider()
     st.markdown('<p class="section-label">About</p>', unsafe_allow_html=True)
     st.markdown(
@@ -219,13 +268,12 @@ with st.sidebar:
 
 
 # ─── Main Header ──────────────────────────────────────────────────────────────
-st.markdown('<h1 class="hero-title">Spectrogram FER System</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="hero-sub">Emotion recognition via Signal Processing &nbsp;·&nbsp; '
-    "MediaPipe &rarr; STFT Spectrograms &rarr; ResNet-18</p>",
-    unsafe_allow_html=True,
-)
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("""
+<div class="hero-container">
+    <div class="hero-title">Spectrogram FER System</div>
+    <div class="hero-sub">Emotion recognition via Signal Processing &nbsp;·&nbsp; MediaPipe &rarr; STFT Spectrograms &rarr; ResNet-18</div>
+</div>
+""", unsafe_allow_html=True)
 
 engine = load_engine()
 if engine is None:
@@ -277,12 +325,14 @@ with tab_webcam:
             buffer = FacialSignalBuffer()
             frame_placeholder = st.empty()
             progress = st.progress(0, text="Capturing frames...")
-            CAPTURE_FRAMES = 90
+            CAPTURE_FRAMES = 100
 
+            frames_bgr = []
             for i in range(CAPTURE_FRAMES):
                 ret, frame = cap.read()
                 if not ret:
                     break
+                frames_bgr.append(frame)
                 buffer.push_frame(frame)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frame_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
@@ -302,12 +352,15 @@ with tab_webcam:
                     proba = engine.predict(spectrogram_img)
                     pred_idx = int(np.argmax(proba))
                     pred_class = CLASS_NAMES[pred_idx]
-                    result = {
-                        "proba": proba,
-                        "predicted_class": pred_class,
-                        "signal_matrix": signal_matrix,
-                        "spectrogram_img": spectrogram_img,
-                    }
+                    
+                    rgb_img = cv2.cvtColor(frames_bgr[45], cv2.COLOR_BGR2RGB) if len(frames_bgr) > 45 else frame_rgb
+                    
+                    result = [{
+                        "timestamp": "Live Capture",
+                        "image": rgb_img,
+                        "emotion": pred_class,
+                        "confidence": float(np.max(proba)) * 100
+                    }]
             else:
                 st.warning(
                     "Not enough frames with a detected face. " "Try again in better lighting."
@@ -315,182 +368,72 @@ with tab_webcam:
 
 
 # ── Tab 3: Demo Samples ────────────────────────────────────────────────────────
-DEMO_META = {
-    "Happy": "Wide smile, raised lip corners",
-    "Surprised": "Raised brows, open jaw, wide eyes",
-    "Neutral": "Relaxed face, baseline signals",
-    "Angry": "Furrowed brows, tense jaw",
-}
-
 with tab_demo:
-    if not DEMO_DIR.exists() or not list(DEMO_DIR.glob("*.npy")):
-        st.warning(
-            "Demo samples not found. " "Run `python app/generate_demo_samples.py` to generate them."
-        )
+    demo_videos = sorted([p for p in DEMO_DIR.glob("*.mp4")] + [p for p in DEMO_DIR.glob("*.avi")])
+    if not DEMO_DIR.exists() or not demo_videos:
+        st.warning("No demo videos found in `app/demo_samples/`.")
     else:
         st.markdown(
-            '<p class="section-label">Select a pre-generated signal pattern to run inference</p>',
+            '<p class="section-label">Select a demo video to run inference</p>',
             unsafe_allow_html=True,
         )
-        demo_files = {p.stem.capitalize(): p for p in sorted(DEMO_DIR.glob("*.npy"))}
-        cols = st.columns(len(demo_files))
-        selected_demo = None
-
-        for col, (name, path) in zip(cols, demo_files.items()):
-            with col:
-                desc = DEMO_META.get(name, "Synthetic signal pattern")
-                st.markdown(
-                    f'<div class="demo-card">'
-                    f'<div class="dc-emotion">{name}</div>'
-                    f'<div class="dc-desc">{desc}</div>'
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-                if st.button(f"Run — {name}", key=f"demo_{name}", use_container_width=True):
-                    selected_demo = path
-
-        if selected_demo is not None:
-            with st.spinner("Running inference on demo sample..."):
-                signal_matrix = np.load(selected_demo)
-                spectrogram_img = signals_to_spectrogram(signal_matrix)
-                proba = engine.predict(spectrogram_img)
-                pred_idx = int(np.argmax(proba))
-                pred_class = CLASS_NAMES[pred_idx]
-                result = {
-                    "proba": proba,
-                    "predicted_class": pred_class,
-                    "signal_matrix": signal_matrix,
-                    "spectrogram_img": spectrogram_img,
-                }
+        
+        # Group by emotion
+        emotions = sorted(list(set([p.stem.split('_')[0].capitalize() for p in demo_videos])))
+        selected_emotion = st.selectbox("Select Emotion Category", emotions)
+        
+        # Get videos for selected emotion
+        filtered_videos = [p for p in demo_videos if p.stem.split('_')[0].capitalize() == selected_emotion]
+        
+        if not filtered_videos:
+            st.info("No videos found for this emotion.")
+        else:
+            cols = st.columns(len(filtered_videos))
+            selected_demo_video = None
+            for col, vid_path in zip(cols, filtered_videos):
+                with col:
+                    st.video(str(vid_path))
+                    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+                    if st.button(f"Run {vid_path.stem}", key=f"demo_{vid_path.stem}", use_container_width=True):
+                        selected_demo_video = str(vid_path)
+                        
+            if selected_demo_video is not None:
+                with st.spinner(f"Running inference on {Path(selected_demo_video).name}..."):
+                    result = predict_from_video(selected_demo_video, engine)
 
 
 # ─── Results Panel ────────────────────────────────────────────────────────────
 if result is not None:
-    if "error" in result:
+    if isinstance(result, dict) and "error" in result:
         st.error(result["error"])
-    else:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown('<p class="section-label">Analysis Results</p>', unsafe_allow_html=True)
-
-        if "annotated_video_path" in result:
-            col_v1, col_v2, col_v3 = st.columns([1, 2, 1])
-            with col_v2:
-                st.video(result["annotated_video_path"])
-            st.markdown("<br>", unsafe_allow_html=True)
-
-        col_pred, col_spec, col_signals = st.columns([1, 1.3, 1.7])
-
-        # ── Prediction card ───────────────────────────────────────────────
-        with col_pred:
-            proba = result["proba"]
-            pred_class = result["predicted_class"]
-            confidence = float(np.max(proba)) * 100
-
-            st.markdown(
-                f"""
-            <div class="pred-card">
-              <div class="pred-label">Predicted Emotion</div>
-              <div class="pred-emotion">{pred_class}</div>
-              <div class="pred-confidence">{confidence:.1f}% confidence</div>
-              <div class="confidence-bar-bg">
-                <div class="confidence-bar-fill" style="width:{confidence:.1f}%"></div>
-              </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            colors = ["#6366f1" if c == pred_class else "#1e293b" for c in CLASS_NAMES]
-            fig_bar = go.Figure(
-                go.Bar(
-                    x=CLASS_NAMES,
-                    y=(proba * 100).tolist(),
-                    marker_color=colors,
-                    text=[f"{p*100:.0f}%" for p in proba],
-                    textposition="outside",
-                    textfont=dict(size=10, color="#94a3b8"),
-                )
-            )
-            fig_bar.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#0d1526",
-                font=dict(color="#94a3b8", size=10, family="Inter"),
-                yaxis=dict(
-                    title="Confidence (%)",
-                    range=[0, 110],
-                    gridcolor="#1a2740",
-                    zeroline=False,
-                    tickfont=dict(size=9),
-                ),
-                xaxis=dict(tickangle=-35, tickfont=dict(size=9)),
-                margin=dict(l=10, r=10, t=10, b=40),
-                height=280,
-                showlegend=False,
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-        # ── Spectrogram image ─────────────────────────────────────────────
-        with col_spec:
-            st.markdown(
-                '<p class="section-label">Generated Spectrogram</p>', unsafe_allow_html=True
-            )
-            st.image(
-                result["spectrogram_img"],
-                caption="RGB Spectrogram — CNN Input  |  R=Mouth  G=Brow  B=Eye/Jaw",
-                use_container_width=True,
-            )
-
-        # ── FAU signal waveforms ──────────────────────────────────────────
-        with col_signals:
-            st.markdown(
-                '<p class="section-label">Facial Action Unit Signals</p>',
-                unsafe_allow_html=True,
-            )
-            signal_matrix = result["signal_matrix"]
-            t = np.linspace(0, signal_matrix.shape[1] / 30, signal_matrix.shape[1])
-
-            palette = [
-                "#6366f1",
-                "#38bdf8",
-                "#34d399",
-                "#f59e0b",
-                "#f87171",
-                "#a78bfa",
-                "#fb923c",
-            ]
-
-            fig_sig = go.Figure()
-            for i, name in enumerate(SIGNAL_NAMES):
-                fig_sig.add_trace(
-                    go.Scatter(
-                        x=t.tolist(),
-                        y=signal_matrix[i].tolist(),
-                        mode="lines",
-                        name=name.replace("_", " ").title(),
-                        line=dict(color=palette[i % len(palette)], width=1.8),
-                    )
-                )
-
-            fig_sig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#0d1526",
-                font=dict(color="#94a3b8", size=10, family="Inter"),
-                xaxis=dict(title="Time (s)", gridcolor="#1a2740", zeroline=False),
-                yaxis=dict(
-                    title="Normalised Distance",
-                    gridcolor="#1a2740",
-                    zeroline=False,
-                ),
-                legend=dict(
-                    font=dict(size=9),
-                    bgcolor="rgba(0,0,0,0)",
-                    bordercolor="#1a2740",
-                    borderwidth=1,
-                ),
-                margin=dict(l=10, r=10, t=10, b=40),
-                height=340,
-            )
-            st.plotly_chart(fig_sig, use_container_width=True)
+    elif isinstance(result, list):
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        st.markdown('<p class="section-label" style="text-align:center; color:#94a3b8;">Temporal Analysis Report</p>', unsafe_allow_html=True)
+        
+        # Display nicely in a grid
+        cols_per_row = 5
+        for i in range(0, len(result), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                if i + j < len(result):
+                    item = result[i + j]
+                    with col:
+                        # Vibrant colors for dark mode glass cards
+                        emotion = item['emotion']
+                        color = "#34d399" if emotion in ["Happy", "Surprise"] else "#fb7185" if emotion in ["Angry", "Disgust", "Fear"] else "#60a5fa" if emotion == "Sad" else "#a78bfa"
+                        
+                        img_b64 = array_to_base64(item["image"])
+                        
+                        st.markdown(f"""
+                        <div class="result-card">
+                            <div class="rc-image" style="background-image: url('data:image/jpeg;base64,{img_b64}')"></div>
+                            <div class="rc-content">
+                                <div class="rc-timestamp">⏱ {item['timestamp']}</div>
+                                <h3 class="rc-emotion" style="color: {color};">{emotion}</h3>
+                                <div class="rc-confidence">
+                                    <div class="rc-conf-fill" style="width: {item['confidence']}%; background: {color};"></div>
+                                </div>
+                                <div class="rc-conf-text">{item['confidence']:.1f}% Confidence</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
